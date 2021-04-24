@@ -1,5 +1,3 @@
 FROM golang
 
-
-
 CMD bash

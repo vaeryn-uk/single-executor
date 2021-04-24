@@ -1,0 +1,61 @@
+version: "3"
+
+services:
+  chain:
+    build:
+      context: .
+      dockerfile: docker/chain/Dockerfile
+    expose:
+    - "${UDP_PORT}/udp"
+    ports:
+    - "${CHAIN_HTTP_PORT}:80"
+    environment:
+      CHAIN_PORT: "${UDP_PORT}"
+  validator1:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: node_001
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"
+  validator2:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: node_002
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"
+  validator3:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: node_003
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"
+  validator4:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: node_004
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"
+  validator5:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: node_005
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"
+  validator6:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: node_006
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"

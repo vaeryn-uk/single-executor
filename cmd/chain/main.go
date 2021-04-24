@@ -1,29 +1,42 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"log"
 	"net"
+	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-type signature struct {
-	instanceId uuid.UUID
-	nodeId string
-	signature uuid.UUID
-	datetime time.Time
+type Signature struct {
+	InstanceId uuid.UUID `json:"InstanceId"`
+	NodeId     string    `json:"nodeId"`
+	Signature  uuid.UUID `json:"signatureId"`
+	Datetime   time.Time `json:"signedAt"`
 }
 
-var port = 6111
+var signatures []Signature
 
 func main() {
-	signatures := make([]signature, 0)
+	portEnv := os.Getenv("CHAIN_PORT")
 
-	addr := "localhost:" + strconv.Itoa(port)
+	port, err := strconv.Atoi(portEnv)
 
-	pc, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		log.Fatalf("Could not resolve a UDP port from environment CHAIN_PORT %s\n", err.Error())
+	}
+
+	signatures = make([]Signature, 0)
+
+	udpAddr := "0.0.0.0:" + strconv.Itoa(port)
+	httpAddr := "0.0.0.0:80"
+
+	pc, err := net.ListenPacket("udp", udpAddr)
 
 	if err != nil {
 		panic(err)
@@ -31,7 +44,15 @@ func main() {
 
 	buffer := make([]byte, 1024)
 
-	log.Println("Listening for UDP on " + addr)
+	log.Printf("Listening for HTTP on %s", httpAddr)
+
+	go func () {
+		if err := http.ListenAndServe(httpAddr, &httpHandler{}); err != nil {
+			panic(err)
+		}
+	}()
+
+	log.Println("Listening for UDP on " + udpAddr)
 
 	for {
 		n, addr, err := pc.ReadFrom(buffer)
@@ -46,7 +67,7 @@ func main() {
 
 		parts := strings.Split(data, ".")
 
-		log.Printf("Received packet from %s (length: %d): %s", addr.String(), n, buffer)
+		log.Printf("Received packet from %s (length: %d): %s", addr.String(), n, buffer[:n])
 
 		if len(parts) != 3 {
 			log.Printf("Malformed UDP packet")
@@ -74,8 +95,28 @@ func main() {
 			continue
 		}
 
-		signatures = append(signatures, signature{instanceId, nodeId, sig, time.Now()})
+		signatures = append(signatures, Signature{instanceId, nodeId, sig, time.Now()})
 
 		log.Printf("Signature captured. Length: %d", len(signatures))
+	}
+}
+
+type httpHandler struct {}
+
+func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	data, err := json.Marshal(signatures)
+
+	if err != nil {
+		writer.WriteHeader(500)
+		if _, err := fmt.Fprintf(writer, "Could not encode JSON: %s", err); err != nil {
+			panic(err)
+		}
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(200)
+
+	if _, err := writer.Write(data); err != nil {
+		panic(err)
 	}
 }

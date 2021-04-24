@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/google/uuid"
 	"log"
@@ -12,12 +11,19 @@ import (
 
 var instanceId uuid.UUID
 var nodeId string
+var duration time.Duration
 
 func main() {
 	nodeId = os.Getenv("NODE_ID")
 
 	if len(nodeId) == 0 {
-		log.Fatalln("Must provide a node ID")
+		log.Fatalln("Must provide env NODE_ID")
+	}
+
+	udpAddr := os.Getenv("CHAIN_UDP_ADDR")
+
+	if len(udpAddr) == 0 {
+		log.Fatalln("Must specify env CHAIN_UDP_ADDR")
 	}
 
 	id, err := uuid.NewUUID()
@@ -30,13 +36,13 @@ func main() {
 
 	log.Printf("Running binary. Instance ID: %s", instanceId.String())
 
-	duration, err := time.ParseDuration("300ms")
+	duration, err = time.ParseDuration(os.Getenv("SIGN_INTERVAL"))
 
 	if err != nil {
-		panic(err)
+		log.Fatalf("Invalid env SIGN_INTERVAL: %s\n", err.Error())
 	}
 
-	addr, err := net.ResolveUDPAddr("udp", "localhost:6111")
+	addr, err := net.ResolveUDPAddr("udp", udpAddr)
 
 	if err != nil {
 		panic(err)
@@ -63,10 +69,22 @@ func doThing(conn *net.UDPConn) {
 		return
 	}
 
-	n, err := conn.Write(bytes.NewBufferString(fmt.Sprintf("%s.%s.%s", nodeId, instanceId, signature)).Bytes())
+	timeout, err := time.ParseDuration("10ms")
 
 	if err != nil {
-		log.Printf("Could not write to UDP %s", err.Error())
+		panic(err)
+	}
+
+	err = conn.SetDeadline(time.Now().Add(timeout))
+
+	if err != nil {
+		panic(err)
+	}
+
+	n, err := fmt.Fprintf(conn, "%s.%s.%s", nodeId, instanceId, signature)
+
+	if err != nil {
+		log.Printf("Could not write to UDP: %s", err.Error())
 	} else {
 		log.Printf("Wrote %d bytes over UDP", n)
 	}
