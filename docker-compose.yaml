@@ -1,0 +1,11 @@
+version: "3"
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    working_dir: /app
+    command: bash
+    volumes:
+      - "./:/app"
