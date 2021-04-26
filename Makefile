@@ -1,5 +1,5 @@
 .PHONY: build
-build: built/binary built/chain
+build: built/binary built/chain built/watchdog
 
 .PHONY: clean
 clean:
@@ -10,3 +10,6 @@ built/binary: cmd/binary
 
 built/chain: cmd/chain
 	go build -o built/chain cmd/chain/main.go
+
+built/chain: cmd/watchdog
+	go build -o built/watchdog cmd/watchdog/main.go

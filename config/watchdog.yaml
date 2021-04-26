@@ -1,0 +1,7 @@
+minElectionTimeout: 150
+maxElectionTimeout: 300
+networkInterval: "10s"
+
+peers:
+  - id: 1
+    address: "validator1:6000"
