@@ -3,6 +3,7 @@ package watchdog
 import (
 	"fmt"
 	"gopkg.in/yaml.v2"
+	"math/rand"
 	"net"
 	"time"
 )
@@ -12,13 +13,20 @@ type peerInput struct {
 	Address string `yaml:"address"`
 }
 
+type cmdInput struct {
+	Name string   `yaml:"name"`
+	Args []string `yaml:"args"`
+}
+
 type configurationInput struct {
-	MinElectionTimeout int    `yaml:"minElectionTimeout"`
-	MaxElectionTimeout int    `yaml:"maxElectionTimeout"`
-	NetworkInterval   string `yaml:"networkInterval"`
-	Peers []peerInput `yaml:"peers"`
-	ListenOn string `yaml:"listenOn"`
-	Id uint8 `yaml:"id"`
+	MinElectionTimeout uint        `yaml:"minElectionTimeout"`
+	MaxElectionTimeout uint        `yaml:"maxElectionTimeout"`
+	NetworkInterval    uint        `yaml:"networkInterval"`
+	Peers              []peerInput `yaml:"peers"`
+	ListenOn           string      `yaml:"listenOn"`
+	Id                 uint8       `yaml:"id"`
+	Command            cmdInput    `yaml:"command"`
+	HeartbeatInterval  uint        `yaml:"heartbeatInterval"`
 }
 
 type Peer struct {
@@ -26,13 +34,29 @@ type Peer struct {
 	id Id
 }
 
+type Cmd struct {
+	command string
+	args []string
+}
+
 type Configuration struct {
 	id Id
-	minElectionTimeout int
-	maxElectionTimeout int
+	minElectionTimeout time.Duration
+	maxElectionTimeout time.Duration
 	networkInterval time.Duration
 	peers map[Id]Peer
 	listenOn *net.UDPAddr
+	command Cmd
+	heartbeatInterval time.Duration
+}
+
+func (c *Configuration) RandomElectionTimeout() time.Duration {
+	min := int(c.minElectionTimeout.Milliseconds())
+	max := int(c.maxElectionTimeout.Milliseconds())
+
+	ms := rand.Intn(max - min) + min
+
+	return msIntToDuration(uint(ms))
 }
 
 func (c *Configuration) NumberOfPeers() int {
@@ -69,15 +93,13 @@ func ParseConfiguration(in []byte) (Configuration, error) {
 		return result, fmt.Errorf("minElectionTimeout must be less than maxElectionTimeout")
 	}
 
-	result.networkInterval, err = time.ParseDuration(raw.NetworkInterval)
-
-	if err != nil {
-		return result, fmt.Errorf("Invalid runtimeIncrement string. Must be golang duration: %s\n", err.Error())
-	}
+	result.networkInterval = msIntToDuration(raw.NetworkInterval)
 
 	result.id = Id(raw.Id)
-	result.minElectionTimeout = raw.MinElectionTimeout
-	result.maxElectionTimeout = raw.MaxElectionTimeout
+	result.minElectionTimeout = msIntToDuration(raw.MinElectionTimeout)
+	result.maxElectionTimeout = msIntToDuration(raw.MaxElectionTimeout)
+	result.heartbeatInterval  = msIntToDuration(raw.HeartbeatInterval)
+
 	result.peers = make(map[Id]Peer)
 
 	for _, peer := range raw.Peers {
@@ -90,5 +112,11 @@ func ParseConfiguration(in []byte) (Configuration, error) {
 		return result, fmt.Errorf("Invalid UDP listen addr: %s\n", err.Error())
 	}
 
+	result.command = Cmd{raw.Command.Name, raw.Command.Args}
+
 	return result, nil
+}
+
+func msIntToDuration(ms uint) time.Duration {
+	return time.Duration(ms * 1e6)
 }

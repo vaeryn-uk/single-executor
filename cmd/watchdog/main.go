@@ -21,15 +21,20 @@ func main() {
 
 	w := watchdog.NewWatchdog(config)
 
-	err, errs := w.Start()
+	err = w.Start()
 
 	if err != nil {
 		log.Fatalf("Could not start watchdog: %s\n", err.Error())
 	}
 
 	for {
-		// Simply loops on error channel and report them.
-		log.Printf("Watchdog error: %s\n", (<- errs).Error())
+		// Simply loops on output channels and report details.
+		select {
+		case err := <- w.Errors:
+			log.Printf("Watchdog ERR: %s\n", err.Error())
+		case info := <- w.Info:
+			log.Printf("Watchdog INFO %s\n", info)
+		}
 	}
 }
 
