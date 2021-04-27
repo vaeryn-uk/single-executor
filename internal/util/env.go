@@ -1,3 +1,4 @@
+// util provides general-case functionality used by, but not specific to, our implementations.
 package util
 
 import (
@@ -5,6 +6,7 @@ import (
 	"os"
 )
 
+// Will exit the program if env name is empty or missing.
 func MustGetEnv(name string) string {
 	value := os.Getenv(name)
 

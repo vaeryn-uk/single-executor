@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"single-executor/internal/util"
 	"time"
 )
 
@@ -13,27 +14,6 @@ const NullId Id = 0
 
 func (id Id) IsNull() bool {
 	return id == NullId
-}
-
-type messageType byte
-
-const (
-	MessageVote        messageType = 0x01
-	MessageVoteRequest messageType = 0x02
-	MessageHeartbeat   messageType = 0x03
-)
-
-func (t messageType) ToString() string {
-	switch t {
-	case MessageVote:
-		return "vote-for"
-	case MessageVoteRequest:
-		return "vote-for-me"
-	case MessageHeartbeat:
-		return "heartbeat"
-	}
-
-	return ""
 }
 
 type state int
@@ -58,38 +38,11 @@ type Watchdog struct {
 	leader          Id
 	process         *os.Process
 	votedFor        Id
+	queue util.Queue
 }
 
-type message struct {
-	id    Id
-	term  uint8
-	mtype messageType
-}
-
-func (m message) Serialize() []byte {
-	return []byte{byte(m.id), m.term, byte(m.mtype)}
-}
-
-func (m message) ToString() string {
-	return fmt.Sprintf("source: %d, term: %d, type: %s", m.id, m.term, m.mtype.ToString())
-}
-
-func messageFromBytes(data []byte) (err error, m message) {
-	if len(data) != 3 {
-		err = fmt.Errorf("Malformed UDP message %x\n", data)
-	} else {
-		m = message{
-			Id(data[0]),
-			data[1],
-			messageType(data[2]),
-		}
-	}
-
-	return
-}
-
-func NewWatchdog(c Configuration) Watchdog {
-	return Watchdog{
+func NewWatchdog(c Configuration) *Watchdog {
+	w := Watchdog{
 		c,
 		StateElection,
 		make(map[Id]bool),
@@ -103,7 +56,10 @@ func NewWatchdog(c Configuration) Watchdog {
 		NullId,
 		nil,
 		NullId,
+		make(util.Queue),
 	}
+
+	return &w
 }
 
 func (w *Watchdog) Start() error {
@@ -129,6 +85,8 @@ func (w *Watchdog) Start() error {
 
 	w.reset()
 
+	w.queue.Start()
+
 	return nil
 }
 
@@ -137,7 +95,7 @@ func (w *Watchdog) resetElectionTimer() {
 		w.electionTimer.Stop()
 	}
 
-	w.electionTimer = time.AfterFunc(w.config.RandomElectionTimeout(), w.startElection)
+	w.electionTimer = time.AfterFunc(w.config.RandomElectionTimeout(), w.queue.DeferredEnqueue(w.startElection))
 }
 
 func (w *Watchdog) info(detail string) {
@@ -183,11 +141,12 @@ func (w *Watchdog) resetLeadershipTimer() {
 		w.leadershipTimer.Stop()
 	}
 
-	w.leadershipTimer = time.AfterFunc(w.config.networkInterval, w.reset)
+	w.leadershipTimer = time.AfterFunc(w.config.networkInterval, w.queue.DeferredEnqueue(w.reset))
 }
 
 func (w *Watchdog) reset() {
 	w.state = StateFollowing
+	w.leader = NullId
 	w.resetVotes()
 	w.resetElectionTimer()
 	w.resetHeartbeat()
@@ -195,10 +154,10 @@ func (w *Watchdog) reset() {
 }
 
 func (w *Watchdog) resetVotes() {
-	w.votes = w.initVotes()
+	w.votes = w.initVotes(w.leader.IsNull())
 }
 
-func (w *Watchdog) initVotes() map[Id]bool {
+func (w *Watchdog) initVotes(voteForSelf bool) map[Id]bool {
 	votes := make(map[Id]bool)
 
 	for id := range w.config.peers {
@@ -206,8 +165,9 @@ func (w *Watchdog) initVotes() map[Id]bool {
 		votes[id] = false
 	}
 
-	// Always vote for ourself
-	votes[w.config.id] = true
+	if voteForSelf {
+		votes[w.config.id] = true
+	}
 
 	return votes
 }
@@ -385,13 +345,11 @@ func (w *Watchdog) resetHeartbeat() {
 			// TODO: there is no exit from this function.
 			<- w.heartbeatTicker.C
 
-			w.heartbeat()
+			w.queue.Enqueue(w.heartbeat)
 		}
 	}()
 }
 
 func (w *Watchdog) resetLeaderHeartbeats() {
-	w.heartbeats = w.initVotes()
-
-
+	w.heartbeats = w.initVotes(true)
 }

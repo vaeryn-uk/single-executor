@@ -10,8 +10,8 @@ id: 1
 peers:
   - id: 2
     address: "validator2:6000"
-#  - id: 3
-#    address: "validator3:6000"
+  - id: 3
+    address: "validator3:6000"
 
 command:
   command: yes

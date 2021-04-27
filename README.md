@@ -17,3 +17,10 @@ This will bring up:
 
 To see the signatures written to the chain, our `chain` service will respond with JSON over
 HTTP, `localhost:8080`.
+
+## Solution
+
+### Known Limitations
+* Static configuration.
+* Non-BFT. This solution assumes there can be no bad actors.
+* Transport is currently insecure.
