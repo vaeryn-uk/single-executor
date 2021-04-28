@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 )
 
 // Monitors a watchdog instance, returning its state
@@ -21,10 +22,34 @@ type watchdogReport struct {
 	Leader Id `json:"leader"`
 	VotedFor Id `json:"votedFor"`
 	CurrentTerm uint8 `json:"currentTerm"`
+	Blacklist []int `json:"blacklist"`
 	Events []string `json:"events"`
 }
 
 func (h httpMonitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	// Simple routing
+	switch request.URL.Path {
+	case "/state":
+		h.reportState(writer)
+	case "/blacklist":
+		idInput  := request.URL.Query().Get("id")
+
+		if id, err := strconv.Atoi(idInput); err != nil {
+			http.Error(writer, "Must provide a numeric ID", http.StatusBadRequest)
+		} else {
+			h.blacklist(writer, Id(id))
+		}
+	default:
+		http.NotFound(writer, request)
+	}
+}
+
+func (h *httpMonitor) blacklist(writer http.ResponseWriter, id Id) {
+	h.w.adapter.blacklistNode(id)
+	writer.WriteHeader(200)
+}
+
+func (h *httpMonitor) reportState(writer http.ResponseWriter) {
 	events := make([]string, 0)
 
 	for timestamp, event := range h.w.events {
@@ -33,25 +58,26 @@ func (h httpMonitor) ServeHTTP(writer http.ResponseWriter, request *http.Request
 
 	sort.Strings(events)
 
+	blacklist := make([]int, 0)
+
+	for _, id := range h.w.adapter.blacklist {
+		blacklist = append(blacklist, int(id))
+	}
+
 	report := watchdogReport{
 		h.w.id,
 		h.w.state.ToString(),
 		h.w.leader,
 		h.w.votedFor,
 		h.w.currentTerm,
+		blacklist,
 		events,
 	}
 
 	data, err := json.Marshal(report)
 
 	if err != nil {
-		writer.WriteHeader(500)
-		_, err = writer.Write([]byte(err.Error()))
-
-		if err != nil {
-			log.Fatalln(err)
-		}
-
+		http.Error(writer, err.Error(), 500)
 		return
 	}
 

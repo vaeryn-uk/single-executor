@@ -33,7 +33,7 @@ func (m message) Serialize() []byte {
 	return []byte{byte(m.id), m.term, byte(m.mtype)}
 }
 
-func (m message) ToString() string {
+func (m message) String() string {
 	return fmt.Sprintf("source: %d, term: %d, type: %s", m.id, m.term, m.mtype.ToString())
 }
 

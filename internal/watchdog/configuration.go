@@ -108,13 +108,23 @@ func (c *Configuration) HalfInterval() time.Duration {
 }
 
 func (c *Cluster) AddressFor(id Id) (string, error) {
-	peer, ok := c.nodes[id]
+	node, ok := c.nodes[id]
 
 	if !ok {
 		return "", fmt.Errorf("Unknown node %d\n", id)
 	}
 
-	return peer.udpAddr, nil
+	return node.udpAddr, nil
+}
+
+func (c *Cluster) HttpAddressFor(id Id) (string, error) {
+	node, ok := c.nodes[id]
+
+	if !ok {
+		return "", fmt.Errorf("Unknown node %d\n", id)
+	}
+
+	return node.httpAddr, nil
 }
 
 func ParseConfiguration(config []byte) (Configuration, error) {

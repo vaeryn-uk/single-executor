@@ -57,6 +57,7 @@ type Watchdog struct {
 	queue           util.Queue
 	randomSource    rand.Source
 	events          map[time.Time]string
+	adapter *adapter
 }
 
 func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
@@ -79,6 +80,7 @@ func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
 		make(util.Queue),
 		rand.NewSource(time.Now().UnixNano()),
 		make(map[time.Time]string),
+		makeAdapter(cluster),
 	}
 
 	return &w
@@ -244,14 +246,14 @@ func (w *Watchdog) event(name string) {
 }
 
 func (w *Watchdog) handleUdpData(data []byte, addr net.Addr) {
-	err, m := messageFromBytes(data)
-
-	w.info(fmt.Sprintf("NET: Received %d bytes (%s) from %s\n", len(data), m.ToString(), addr))
+	m, err := w.adapter.receive(data, addr)
 
 	if err != nil {
 		w.error(err)
 		return
 	}
+
+	w.info(fmt.Sprintf("NET: Received %d bytes (%s) from %s\n", len(data), m.String(), addr))
 
 	if m.term < w.currentTerm {
 		// Old term. Just ignore.
@@ -375,26 +377,12 @@ func (w *Watchdog) heartbeat() {
 }
 
 func (w *Watchdog) sendUdp(addr string, mtype messageType) {
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	err, info := w.adapter.send(addr, message{w.id, w.currentTerm, mtype})
 
 	if err != nil {
 		w.error(err)
-		return
-	}
-
-	if conn, err := net.DialUDP("udp", nil, udpAddr); err != nil {
-		w.error(err)
 	} else {
-		defer conn.Close()
-
-		msg := message{w.id, w.currentTerm, mtype}
-		n, err := conn.Write(msg.Serialize())
-
-		if err != nil {
-			w.error(err)
-		} else {
-			w.info(fmt.Sprintf("NET: sent %d bytes (%s) to %s\n", n, msg.ToString(), udpAddr))
-		}
+		w.info(info)
 	}
 }
 
