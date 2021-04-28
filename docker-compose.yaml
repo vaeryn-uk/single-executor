@@ -1,10 +1,12 @@
+# A box for development/compiling code.
+
 version: "3"
 
-services:
+services:l
   dev:
     build:
       context: .
-      dockerfile: docker/dev/Dockerfile
+      dockerfile: docker/dev/Dockerfie
     working_dir: /app
     command: bash
     volumes:

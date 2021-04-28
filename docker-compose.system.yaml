@@ -1,3 +1,6 @@
+# This stack will bring up all the services needed to demonstrate a multi-node installation
+# of the single execution process.
+
 version: "3"
 
 services:
