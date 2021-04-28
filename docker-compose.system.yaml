@@ -1,6 +1,14 @@
 version: "3"
 
 services:
+  demoserver:
+    build:
+      context: .
+      dockerfile: docker/demoserver/Dockerfile
+    ports:
+    - "${DEMO_HTTP_PORT}:80"
+    volumes:
+    - "./web/demoserver/templates:/www/templates"
   chain:
     build:
       context: .
@@ -15,32 +23,62 @@ services:
     build:
       context: .
       dockerfile: docker/validator/Dockerfile
+    ports:
+      - "8010:80"
     environment:
-      NODE_ID: node_001
+      NODE_ID: 1
       CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
       SIGN_INTERVAL: "${SIGN_INTERVAL}"
     volumes:
-    - "./config/watchdog/validator1.yaml:/etc/watchdog.yaml"
+      - "./config/watchdog:/etc/watchdog"
   validator2:
     build:
       context: .
       dockerfile: docker/validator/Dockerfile
     environment:
-      NODE_ID: node_002
+      NODE_ID: 2
       CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
       SIGN_INTERVAL: "${SIGN_INTERVAL}"
+    ports:
+      - "8011:80"
     volumes:
-      - "./config/watchdog/validator2.yaml:/etc/watchdog.yaml"
+      - "./config/watchdog:/etc/watchdog"
   validator3:
     build:
       context: .
       dockerfile: docker/validator/Dockerfile
     environment:
-      NODE_ID: node_003
+      NODE_ID: 3
       CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
       SIGN_INTERVAL: "${SIGN_INTERVAL}"
+    ports:
+      - "8012:80"
     volumes:
-      - "./config/watchdog/validator3.yaml:/etc/watchdog.yaml"
+      - "./config/watchdog:/etc/watchdog"
+  validator4:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: 4
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"
+    ports:
+      - "8013:80"
+    volumes:
+      - "./config/watchdog:/etc/watchdog"
+  validator5:
+    build:
+      context: .
+      dockerfile: docker/validator/Dockerfile
+    environment:
+      NODE_ID: 5
+      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
+      SIGN_INTERVAL: "${SIGN_INTERVAL}"
+    ports:
+      - "8014:80"
+    volumes:
+      - "./config/watchdog:/etc/watchdog"
 #  validator4:
 #    build:
 #      context: .

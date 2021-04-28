@@ -3,14 +3,76 @@ package watchdog
 import (
 	"fmt"
 	"gopkg.in/yaml.v2"
-	"math/rand"
 	"net"
+	"sort"
 	"time"
 )
 
-type peerInput struct {
-	Id      uint8 `yaml:"id"`
-	Address string `yaml:"address"`
+type nodeInput struct {
+	Id       uint8  `yaml:"id"`
+	UdpAddr  string `yaml:"udpAddr"`
+	HttpAddr string `yaml:"httpAddr"`
+}
+
+func (n nodeInput) validate() error {
+	if n.Id == 0 {
+		return fmt.Errorf("A node must have an id")
+	}
+
+	if len(n.UdpAddr) == 0 {
+		return fmt.Errorf("A node must have a udpAddr")
+	}
+
+	if len(n.HttpAddr) == 0 {
+		return fmt.Errorf("A node must have an httpAddr")
+	}
+
+	return nil
+}
+
+type Node struct {
+	udpAddr  string
+	httpAddr string
+	id       Id
+}
+
+func (n Node) UdpAddr() string {
+	return n.udpAddr
+}
+
+func (n Node) HttpAddr() string {
+	return n.httpAddr
+}
+
+func (n Node) Id() Id {
+	return n.id
+}
+
+type clusterInput struct {
+	Nodes []nodeInput `yaml:"nodes"`
+}
+
+type Cluster struct {
+	nodes map[Id]Node
+}
+
+func (c Cluster) Nodes() []Node {
+	tmp := make([]Node, len(c.nodes))
+	keys := make([]int, len(c.nodes))
+	index := 0
+
+	for id := range c.nodes {
+		keys[index] = int(id)
+		index++
+	}
+
+	sort.Ints(keys)
+
+	for key, id := range keys {
+		tmp[key] = c.nodes[Id(id)]
+	}
+
+	return tmp
 }
 
 type cmdInput struct {
@@ -19,102 +81,103 @@ type cmdInput struct {
 }
 
 type configurationInput struct {
-	MinElectionTimeout uint        `yaml:"minElectionTimeout"`
-	MaxElectionTimeout uint        `yaml:"maxElectionTimeout"`
-	NetworkInterval    uint        `yaml:"networkInterval"`
-	Peers              []peerInput `yaml:"peers"`
-	ListenOn           string      `yaml:"listenOn"`
-	Id                 uint8       `yaml:"id"`
-	Command            cmdInput    `yaml:"command"`
-	HeartbeatInterval  uint        `yaml:"heartbeatInterval"`
-}
-
-type Peer struct {
-	addr string
-	id Id
+	MinElectionTimeout uint     `yaml:"minElectionTimeout"`
+	MaxElectionTimeout uint     `yaml:"maxElectionTimeout"`
+	NetworkInterval    uint     `yaml:"networkInterval"`
+	ListenOn           string   `yaml:"listenOn"`
+	Command            cmdInput `yaml:"command"`
+	HeartbeatInterval  uint     `yaml:"heartbeatInterval"`
 }
 
 type Cmd struct {
 	command string
-	args []string
+	args    []string
 }
 
 type Configuration struct {
-	id Id
 	minElectionTimeout time.Duration
 	maxElectionTimeout time.Duration
-	networkInterval time.Duration
-	peers map[Id]Peer
-	listenOn *net.UDPAddr
-	command Cmd
-	heartbeatInterval time.Duration
-}
-
-func (c *Configuration) RandomElectionTimeout() time.Duration {
-	min := int(c.minElectionTimeout.Milliseconds())
-	max := int(c.maxElectionTimeout.Milliseconds())
-
-	ms := rand.Intn(max - min) + min
-
-	return msIntToDuration(uint(ms))
-}
-
-func (c *Configuration) NumberOfPeers() int {
-	return len(c.peers)
+	networkInterval    time.Duration
+	listenOn           *net.UDPAddr
+	command            Cmd
+	heartbeatInterval  time.Duration
 }
 
 func (c *Configuration) HalfInterval() time.Duration {
 	return time.Duration(c.networkInterval.Nanoseconds() / 2)
 }
 
-func (c *Configuration) AddressFor(id Id) (string, error) {
-	peer, ok := c.peers[id]
+func (c *Cluster) AddressFor(id Id) (string, error) {
+	peer, ok := c.nodes[id]
 
 	if !ok {
-		return "", fmt.Errorf("Unknown peer %s\n", id)
+		return "", fmt.Errorf("Unknown node %d\n", id)
 	}
 
-	return peer.addr, nil
+	return peer.udpAddr, nil
 }
 
-func ParseConfiguration(in []byte) (Configuration, error) {
+func ParseConfiguration(config []byte) (Configuration, error) {
 	var raw configurationInput
-	var result Configuration
+	var parsedConfig Configuration
 
-	err := yaml.Unmarshal(in, &raw)
+	err := yaml.Unmarshal(config, &raw)
 
 	if err != nil {
-		return result, err
+		return parsedConfig, err
 	}
-
-	fmt.Printf("%+v\n", raw)
 
 	if raw.MinElectionTimeout >= raw.MaxElectionTimeout {
-		return result, fmt.Errorf("minElectionTimeout must be less than maxElectionTimeout")
+		return parsedConfig, fmt.Errorf("minElectionTimeout must be less than maxElectionTimeout")
 	}
 
-	result.networkInterval = msIntToDuration(raw.NetworkInterval)
+	parsedConfig.networkInterval = msIntToDuration(raw.NetworkInterval)
+	parsedConfig.minElectionTimeout = msIntToDuration(raw.MinElectionTimeout)
+	parsedConfig.maxElectionTimeout = msIntToDuration(raw.MaxElectionTimeout)
+	parsedConfig.heartbeatInterval = msIntToDuration(raw.HeartbeatInterval)
 
-	result.id = Id(raw.Id)
-	result.minElectionTimeout = msIntToDuration(raw.MinElectionTimeout)
-	result.maxElectionTimeout = msIntToDuration(raw.MaxElectionTimeout)
-	result.heartbeatInterval  = msIntToDuration(raw.HeartbeatInterval)
-
-	result.peers = make(map[Id]Peer)
-
-	for _, peer := range raw.Peers {
-		result.peers[Id(peer.Id)] = Peer{peer.Address, Id(peer.Id)}
-	}
-
-	result.listenOn, err = net.ResolveUDPAddr("udp", raw.ListenOn)
+	parsedConfig.listenOn, err = net.ResolveUDPAddr("udp", raw.ListenOn)
 
 	if err != nil {
-		return result, fmt.Errorf("Invalid UDP listen addr: %s\n", err.Error())
+		return parsedConfig, fmt.Errorf("Invalid UDP listen udpAddr: %s\n", err.Error())
 	}
 
-	result.command = Cmd{raw.Command.Name, raw.Command.Args}
+	parsedConfig.command = Cmd{raw.Command.Name, raw.Command.Args}
 
-	return result, nil
+	return parsedConfig, nil
+}
+
+func ParseCluster(in []byte) (Cluster, error) {
+	var cluster Cluster
+	var input clusterInput
+
+	err := yaml.Unmarshal(in, &input)
+
+	if err != nil {
+		return cluster, err
+	}
+
+	cluster.nodes = make(map[Id]Node)
+
+	for _, nodeInput := range input.Nodes {
+		if err = nodeInput.validate(); err != nil {
+			return cluster, err
+		}
+
+		var node Node
+
+		node.id = Id(nodeInput.Id)
+		node.udpAddr = nodeInput.UdpAddr
+		node.httpAddr = nodeInput.HttpAddr
+
+		cluster.nodes[node.id] = node
+	}
+
+	if len(cluster.nodes) == 0 {
+		return cluster, fmt.Errorf("Cluster file is invalid. Must specify at least one node.\n")
+	}
+
+	return cluster, nil
 }
 
 func msIntToDuration(ms uint) time.Duration {

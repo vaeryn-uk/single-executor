@@ -1,0 +1,16 @@
+nodes:
+  - id: 1
+    udpAddr: "validator1:6000"
+    httpAddr: "http://validator1"
+  - id: 2
+    udpAddr: "validator2:6000"
+    httpAddr: "http://validator2"
+  - id: 3
+    udpAddr: "validator3:6000"
+    httpAddr: "http://validator3"
+  - id: 4
+    udpAddr: "validator4:6000"
+    httpAddr: "http://validator4"
+  - id: 5
+    udpAddr: "validator5:6000"
+    httpAddr: "http://validator5"

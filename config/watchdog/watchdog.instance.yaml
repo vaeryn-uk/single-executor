@@ -5,13 +5,5 @@ networkInterval: 10000    # 10s
 heartbeatInterval: 1000
 listenOn: "0.0.0.0:6000"
 
-id: 3
-
-peers:
-  - id: 1
-    address: "validator1:6000"
-  - id: 2
-    address: "validator2:6000"
-
 command:
   command: yes

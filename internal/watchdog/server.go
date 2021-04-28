@@ -2,6 +2,7 @@ package watchdog
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"single-executor/internal/util"
@@ -24,8 +25,23 @@ const (
 	StateElection
 )
 
+func (s state) ToString() string {
+	switch s {
+	case StateElection:
+		return "election"
+	case StateLeading:
+		return "leading"
+	case StateFollowing:
+		return "following"
+	}
+
+	return ""
+}
+
 type Watchdog struct {
+	id              Id
 	config          Configuration
+	cluster         Cluster
 	state           state
 	votes           map[Id]bool
 	currentTerm     uint8
@@ -38,12 +54,16 @@ type Watchdog struct {
 	leader          Id
 	process         *os.Process
 	votedFor        Id
-	queue util.Queue
+	queue           util.Queue
+	randomSource    rand.Source
+	events          map[time.Time]string
 }
 
-func NewWatchdog(c Configuration) *Watchdog {
+func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
 	w := Watchdog{
-		c,
+		id,
+		config,
+		cluster,
 		StateElection,
 		make(map[Id]bool),
 		0,
@@ -57,12 +77,21 @@ func NewWatchdog(c Configuration) *Watchdog {
 		nil,
 		NullId,
 		make(util.Queue),
+		rand.NewSource(time.Now().UnixNano()),
+		make(map[time.Time]string),
 	}
 
 	return &w
 }
 
 func (w *Watchdog) Start() error {
+	w.event("start")
+
+	if _, err := w.cluster.AddressFor(w.id); err != nil {
+		// Throw if our ID isn't in the cluster.
+		return err
+	}
+
 	listener, err := net.ListenUDP("udp", w.config.listenOn)
 
 	if err != nil {
@@ -83,9 +112,8 @@ func (w *Watchdog) Start() error {
 		}
 	}()
 
-	w.reset()
-
 	w.queue.Start()
+	w.reset()
 
 	return nil
 }
@@ -95,17 +123,34 @@ func (w *Watchdog) resetElectionTimer() {
 		w.electionTimer.Stop()
 	}
 
-	w.electionTimer = time.AfterFunc(w.config.RandomElectionTimeout(), w.queue.DeferredEnqueue(w.startElection))
+	w.electionTimer = time.AfterFunc(w.randomElectionTimeout(), w.queue.DeferredEnqueue(w.startElection))
 }
 
-func (w *Watchdog) info(detail string) {
-	w.Info <- []byte(detail)
+func (w *Watchdog) randomElectionTimeout() time.Duration {
+	min := int(w.config.minElectionTimeout.Milliseconds())
+	max := int(w.config.maxElectionTimeout.Milliseconds())
+
+	ms := (w.randomSource.Int63() % int64(max-min)) + int64(min)
+
+	duration := msIntToDuration(uint(ms))
+
+	w.info(fmt.Sprintf("Random election timeout: %s\n", duration.String()))
+
+	return duration
 }
 
 func (w *Watchdog) startElection() {
-	w.info("Starting election")
+	if w.state == StateLeading {
+		// A leader cannot start an election.
+		return
+	}
+
+	w.event("start-election")
+
 	w.state = StateElection
 	w.setTerm(w.currentTerm + 1)
+	w.votes[w.id] = true
+	w.votedFor = w.id
 	w.broadcast(MessageVoteRequest)
 
 	// Start timer for another election in cases this once fails/stalls/whatever.
@@ -119,9 +164,17 @@ func (w *Watchdog) setTerm(new uint8) {
 }
 
 func (w *Watchdog) makeLeader() {
-	w.info(fmt.Sprintf("%d is becoming leader for term %d\n", w.config.id, w.currentTerm))
+	if w.state == StateLeading {
+		// If we're already leading, there's nothing to do here.
+		return
+	}
+
+	w.info(fmt.Sprintf("%d is becoming leader for term %d\n", w.id, w.currentTerm))
+	w.event("leadership")
 
 	w.state = StateLeading
+	w.leader = w.id
+
 	w.resetLeadershipTimer()
 	w.resetVotes()
 
@@ -154,32 +207,40 @@ func (w *Watchdog) reset() {
 }
 
 func (w *Watchdog) resetVotes() {
-	w.votes = w.initVotes(w.leader.IsNull())
+	w.votes = w.initVotes()
 }
 
-func (w *Watchdog) initVotes(voteForSelf bool) map[Id]bool {
+func (w *Watchdog) initVotes() map[Id]bool {
 	votes := make(map[Id]bool)
 
-	for id := range w.config.peers {
+	for id := range w.cluster.nodes {
 		// Initialise to no votes from all peers.
 		votes[id] = false
-	}
-
-	if voteForSelf {
-		votes[w.config.id] = true
 	}
 
 	return votes
 }
 
 func (w *Watchdog) broadcast(t messageType) {
-	for _, peer := range w.config.peers {
-		w.sendUdp(peer.addr, t)
+	for _, node := range w.cluster.nodes {
+		w.sendUdp(node.udpAddr, t)
 	}
 }
 
 func (w *Watchdog) error(err error) {
-	w.Errors <- err
+	go func() {
+		w.Errors <- err
+	}()
+}
+
+func (w *Watchdog) info(detail string) {
+	go func() {
+		w.Info <- []byte(detail)
+	}()
+}
+
+func (w *Watchdog) event(name string) {
+	w.events[time.Now()] = fmt.Sprintf("%s (term: %d)", name, w.currentTerm)
 }
 
 func (w *Watchdog) handleUdpData(data []byte, addr net.Addr) {
@@ -224,8 +285,8 @@ func (w *Watchdog) handleHeartbeat(id Id) {
 		// When not leading, a heartbeat instructs us to restart our election timer
 		// (and follow a new leader if not already).
 		w.info(fmt.Sprintf("Detected leader %d\n", id))
-		w.leader = id
 		w.reset()
+		w.leader = id
 	}
 }
 
@@ -256,14 +317,19 @@ func (w *Watchdog) isMajority(votes map[Id]bool) bool {
 
 func (w *Watchdog) handleVoteRequest(id Id) {
 	if w.votedFor.IsNull() {
-		addr, err := w.config.AddressFor(id)
+		addr, err := w.cluster.AddressFor(id)
 
 		if err != nil {
 			w.error(err)
 			return
 		}
 
+		w.event(fmt.Sprintf("voted for %d", id))
+
 		w.sendUdp(addr, MessageVote)
+		w.votedFor = id
+
+		w.resetElectionTimer()
 	}
 }
 
@@ -292,8 +358,8 @@ func (w *Watchdog) heartbeat() {
 	switch w.state {
 	case StateFollowing:
 		// If following, only send a heartbeat to the leader.
-		if w.leader != NullId {
-			addr, err := w.config.AddressFor(w.leader)
+		if !w.leader.IsNull() {
+			addr, err := w.cluster.AddressFor(w.leader)
 
 			if err != nil {
 				w.error(err)
@@ -321,7 +387,7 @@ func (w *Watchdog) sendUdp(addr string, mtype messageType) {
 	} else {
 		defer conn.Close()
 
-		msg := message{w.config.id, w.currentTerm, mtype}
+		msg := message{w.id, w.currentTerm, mtype}
 		n, err := conn.Write(msg.Serialize())
 
 		if err != nil {
@@ -340,10 +406,10 @@ func (w *Watchdog) resetHeartbeat() {
 	// Then queue one up every interval.
 	w.heartbeatTicker = time.NewTicker(w.config.heartbeatInterval)
 
-	go func () {
+	go func() {
 		for {
 			// TODO: there is no exit from this function.
-			<- w.heartbeatTicker.C
+			<-w.heartbeatTicker.C
 
 			w.queue.Enqueue(w.heartbeat)
 		}
@@ -351,5 +417,6 @@ func (w *Watchdog) resetHeartbeat() {
 }
 
 func (w *Watchdog) resetLeaderHeartbeats() {
-	w.heartbeats = w.initVotes(true)
+	w.heartbeats = w.initVotes()
+	w.heartbeats[w.id] = true
 }
