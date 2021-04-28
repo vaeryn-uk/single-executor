@@ -16,23 +16,25 @@ The following assumptions are made:
 
 ## The solution
 
-Our solution to this problem is an adaption of [Raft leader election](https://en.wikipedia.org/wiki/Raft_(algorithm)#Leader_election).
+Our solution to this problem is an adaption of 
+[Raft leader election](https://en.wikipedia.org/wiki/Raft_(algorithm)#Leader_election).
 
-The configured nodes will elect amongst themselves a leader. When a leader
+The configured nodes will elect a leader amongst themselves. When a leader
 is elected, the process will start on that node. Note that we require a majority
 across the whole network for a leader to be elected, so in the case of a 50/50 split
 brain problem, no leader will be elected.
 
 Leadership is temporary, for as long as the leader receives heartbeats from the majority
-of its followers (again, a cluster-wide majority must be reached). If this majority
-is not reached within a given time window, leadership will be relinquished and a new
-election will start.
+of its followers (again, a cluster-wide majority must be reached), it will refresh its leadership
+timeout. If this majority is not reached within a given time window, leadership will be 
+relinquished, and a new election will start.
 
 Whilst leadership is held, the accompanying binary will be run on that node.
 Some grace periods will be granted between starting/stopping the process
 so that we never overlap execution. Note this is not yet implemented.
 
 ### Known Limitations
+
 * Static configuration. The network needs to be brought down to add/remove nodes.
 * The system handles up to 50% node failures. If more than 50% of the connected
   nodes fail, the binary will not run.
@@ -52,6 +54,12 @@ so that we never overlap execution. Note this is not yet implemented.
     to proceed to an active leader state. In this configuration, there is more
     control of the system. This would be useful to test/prove the automatic recovery
     system before switching to it.
+* Revise the network transport protocols. Currently, we have two main mechanisms:
+  * `HTTP` - these channels are simply for demonstration/dashboard purposes, such as JSON responses to watchdog state,
+    or commands to blacklist a network or kill a watchdog instance.
+  * `raw UDP` - the underlying protocol used by the watchdog instances to communicate with one another. In the future, this would
+    probably want to be replaced with some kind of RPC for reliability, security & stability.
+  
 
 ## Components
 
@@ -71,6 +79,11 @@ of the core `watchdog` component. These are:
   could be any executable. For now, we can observe the signing history on `chain` to test
   whether or not one binary is running.
   Note this is not hooked up in the test system/dashboard yet.
+  
+We use docker throughout this to simulate nodes in a network. Using docker compose,
+we easily have each component running in its own container(s) to simulate a multi-node environment on a local machine.
+In reality, these components would likely be deployed across data centers, but here docker gives us
+an realistic test environment.
 
 ## Installation
 
@@ -87,12 +100,15 @@ Then navigate to `http://localhost:8081/dashboard`.
 
 ### Dashboard
 Each watchdog instance state is displayed,
+
 ![Dashboard preview 1](doc/dashboard-preview-1.png)
 
 The event log for each indicates what has happened. For example, here
-we have killed the leader and the system has elected a new leader.
+we have killed the leader and the system has elected a new leader,
+
 ![Dashboard preview 2](doc/dashboard-preview-2.png)
 
 Network issues can be simulated by blocking access to individual 
-nodes on the network. This can be used to test split brain conditions.
+nodes on the network. This can be used to test split brain conditions,
+
 ![Dashboard preview 3](doc/dashboard-preview-3.png)
