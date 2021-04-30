@@ -88,12 +88,13 @@ an realistic test environment.
 ## Installation
 
 Requirements:
-* `docker` (developed on v19.03.12)
-* `docker-compose` (developed on 1.27.2)
+* `GNU make` (developed on v4.2.1)
+* `docker` (developed on v20.10.5)
+* `docker-compose` (developed on 1.29.0)
 
 To compile everything and bring up a test system with dashboard,
 ```
-docker-compose run --rm dev make && docker-compose -f docker-compose.system.yaml up --build
+make run-demo
 ```
 
 Then navigate to `http://localhost:8081/dashboard`.
