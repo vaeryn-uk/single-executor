@@ -3,7 +3,6 @@ package watchdog
 import (
 	"fmt"
 	"math/rand"
-	"net"
 	"os"
 	"single-executor/internal/util"
 	"time"
@@ -94,25 +93,11 @@ func (w *Watchdog) Start() error {
 		return err
 	}
 
-	listener, err := net.ListenUDP("udp", w.config.listenOn)
+	err := w.adapter.listen(w.config.listenOn, w.handleMessage, w.error)
 
 	if err != nil {
 		return err
 	}
-
-	go func() {
-		for {
-			data := make([]byte, 1024)
-
-			n, addr, err := listener.ReadFrom(data)
-
-			if err != nil {
-				w.Errors <- err
-			} else {
-				w.handleUdpData(data[:n], addr)
-			}
-		}
-	}()
 
 	w.queue.Start()
 	w.reset()
@@ -225,7 +210,7 @@ func (w *Watchdog) initVotes() map[Id]bool {
 
 func (w *Watchdog) broadcast(t messageType) {
 	for _, node := range w.cluster.nodes {
-		w.sendUdp(node.udpAddr, t)
+		w.sendMessage(node.udpAddr, t)
 	}
 }
 
@@ -245,16 +230,7 @@ func (w *Watchdog) event(name string) {
 	w.events[time.Now()] = fmt.Sprintf("%s (term: %d)", name, w.currentTerm)
 }
 
-func (w *Watchdog) handleUdpData(data []byte, addr net.Addr) {
-	m, err := w.adapter.receive(data, addr)
-
-	if err != nil {
-		w.error(err)
-		return
-	}
-
-	w.info(fmt.Sprintf("NET: Received %d bytes (%s) from %s\n", len(data), m.String(), addr))
-
+func (w *Watchdog) handleMessage(m message) {
 	if m.term < w.currentTerm {
 		// Old term. Just ignore.
 		return
@@ -328,7 +304,7 @@ func (w *Watchdog) handleVoteRequest(id Id) {
 
 		w.event(fmt.Sprintf("voted for %d", id))
 
-		w.sendUdp(addr, MessageVote)
+		w.sendMessage(addr, MessageVote)
 		w.votedFor = id
 
 		w.resetElectionTimer()
@@ -366,7 +342,7 @@ func (w *Watchdog) heartbeat() {
 			if err != nil {
 				w.error(err)
 			} else {
-				w.sendUdp(addr, MessageHeartbeat)
+				w.sendMessage(addr, MessageHeartbeat)
 			}
 		}
 	case StateLeading:
@@ -376,14 +352,17 @@ func (w *Watchdog) heartbeat() {
 	}
 }
 
-func (w *Watchdog) sendUdp(addr string, mtype messageType) {
-	err, info := w.adapter.send(addr, message{w.id, w.currentTerm, mtype})
+func (w *Watchdog) sendMessage(addr string, mtype messageType) {
+	// Send this off the main thread to stop blocking if there are network issues.
+	go func () {
+		err, info := w.adapter.send(addr, message{w.id, w.currentTerm, mtype})
 
-	if err != nil {
-		w.error(err)
-	} else {
-		w.info(info)
-	}
+		if err != nil {
+			w.error(err)
+		} else {
+			w.info(info)
+		}
+	}()
 }
 
 func (w *Watchdog) resetHeartbeat() {

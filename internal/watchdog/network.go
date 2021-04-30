@@ -23,6 +23,32 @@ func (a *adapter) blacklistNode(id Id) {
 	a.blacklist = append(a.blacklist, id)
 }
 
+func (a *adapter) listen(addr *net.UDPAddr, handler func(message), errorhandler func(error)) error {
+	listener, err := net.ListenUDP("udp", addr)
+
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for {
+			data := make([]byte, 8)
+
+			if n, addr, err := listener.ReadFrom(data); err != nil {
+				errorhandler(err)
+			} else {
+				if msg, err := a.receive(data[:n], addr); err != nil {
+					errorhandler(err)
+				} else {
+					handler(msg)
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (a *adapter) send(addr string, m message) (error, string) {
 	for _, id := range a.blacklist {
 		if nodeAddr, err := a.cluster.AddressFor(id); err == nil && nodeAddr == addr {

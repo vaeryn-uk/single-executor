@@ -23,9 +23,7 @@ services:
     environment:
       CHAIN_PORT: "${UDP_PORT}"
   validator1:
-    build:
-      context: .
-      dockerfile: docker/validator/Dockerfile
+    image: single-executor-validator
     ports:
       - "8010:80"
     environment:
@@ -35,9 +33,7 @@ services:
     volumes:
       - "./config/watchdog:/etc/watchdog"
   validator2:
-    build:
-      context: .
-      dockerfile: docker/validator/Dockerfile
+    image: single-executor-validator
     environment:
       NODE_ID: 2
       CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
@@ -47,62 +43,26 @@ services:
     volumes:
       - "./config/watchdog:/etc/watchdog"
   validator3:
-    build:
-      context: .
-      dockerfile: docker/validator/Dockerfile
+    image: single-executor-validator
     environment:
       NODE_ID: 3
       CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
       SIGN_INTERVAL: "${SIGN_INTERVAL}"
     ports:
       - "8012:80"
-    volumes:
-      - "./config/watchdog:/etc/watchdog"
   validator4:
-    build:
-      context: .
-      dockerfile: docker/validator/Dockerfile
+    image: single-executor-validator
     environment:
       NODE_ID: 4
       CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
       SIGN_INTERVAL: "${SIGN_INTERVAL}"
     ports:
       - "8013:80"
-    volumes:
-      - "./config/watchdog:/etc/watchdog"
   validator5:
-    build:
-      context: .
-      dockerfile: docker/validator/Dockerfile
+    image: single-executor-validator
     environment:
       NODE_ID: 5
       CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
       SIGN_INTERVAL: "${SIGN_INTERVAL}"
     ports:
       - "8014:80"
-    volumes:
-      - "./config/watchdog:/etc/watchdog"
-#  validator4:
-#    build:
-#      context: .
-#      dockerfile: docker/validator/Dockerfile
-#    environment:
-#      NODE_ID: node_004
-#      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
-#      SIGN_INTERVAL: "${SIGN_INTERVAL}"
-#  validator5:
-#    build:
-#      context: .
-#      dockerfile: docker/validator/Dockerfile
-#    environment:
-#      NODE_ID: node_005
-#      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
-#      SIGN_INTERVAL: "${SIGN_INTERVAL}"
-#  validator6:
-#    build:
-#      context: .
-#      dockerfile: docker/validator/Dockerfile
-#    environment:
-#      NODE_ID: node_006
-#      CHAIN_UDP_ADDR: "chain:${UDP_PORT}"
-#      SIGN_INTERVAL: "${SIGN_INTERVAL}"

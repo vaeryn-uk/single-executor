@@ -11,12 +11,14 @@ import (
 	"single-executor/internal/util"
 	"single-executor/internal/watchdog"
 	"strconv"
+	"time"
 )
 
 const templateDir = "/www/templates"
 const watchdogConfigDir = "/www/watchdog-config"
 
 var cluster watchdog.Cluster
+var resolvedHttpClient *http.Client
 
 func templateFile(name string) string {
 	return fmt.Sprintf("%s/%s", templateDir, name)
@@ -40,7 +42,7 @@ func demo(w http.ResponseWriter, r *http.Request) {
 	responses := make([]nodeData, 0)
 
 	for _, node := range cluster.Nodes() {
-		response, err := http.Get(node.HttpAddr() + "/state")
+		response, err := httpClient().Get(node.HttpAddr() + "/state")
 
 		nodeData := nodeData{
 			[]byte("\"Could not retrieve data. Node is down?\""),
@@ -131,7 +133,7 @@ func networkSever(writer http.ResponseWriter, request *http.Request) {
 		http.Error(writer, "Must provide other", 400)
 	}
 
-	resp, err := http.Get(addr + "/blacklist?id=" + strconv.Itoa(other))
+	resp, err := httpClient().Get(addr + "/blacklist?id=" + strconv.Itoa(other))
 
 	if err != nil {
 		http.Error(writer, err.Error(), 500)
@@ -143,4 +145,15 @@ func networkSever(writer http.ResponseWriter, request *http.Request) {
 		util.NoCache(writer)
 		http.Redirect(writer, request, "/dashboard", http.StatusMovedPermanently)
 	}
+}
+
+func httpClient() *http.Client {
+	if resolvedHttpClient == nil {
+		resolvedHttpClient = new(http.Client)
+
+		// 0.5 second timeout
+		resolvedHttpClient.Timeout = time.Duration(500 * time.Millisecond)
+	}
+
+	return resolvedHttpClient
 }
