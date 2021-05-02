@@ -8,11 +8,15 @@ services:
     build:
       context: .
       dockerfile: docker/dashboard/Dockerfile
+    working_dir: /www
     ports:
     - "${DASHBOARD_HTTP_PORT}:80"
     volumes:
     - "./web/dashboard/templates:/www/templates"
     - "./web/dashboard/dist:/www/dist"
+    - "/var/run/docker.sock:/var/run/docker.sock"
+    - "./docker-compose.yaml:/www/docker-compose.yaml"
+    - "./.env:/www/.env"
   chain:
     build:
       context: .

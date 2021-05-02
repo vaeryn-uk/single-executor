@@ -44,6 +44,7 @@ built/flags/validator-image: $(WATCHDOGCONFIG) docker/validator/Dockerfile built
 
 web/dashboard/dist: web/dashboard/node_modules $(DASHBOARDWEBSRCFILES) web/dashboard/tsconfig.json web/dashboard/webpack.config.js
 	docker-compose -f docker-compose.build.yaml run --rm dashboardwebbuilder npm run build
+	touch web/dashboard/dist	# Update mtime of the directory.
 
 web/dashboard/node_modules: web/dashboard/package.json
 	docker-compose -f docker-compose.build.yaml run --rm dashboardwebbuilder npm install

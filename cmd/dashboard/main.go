@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os/exec"
 	"single-executor/internal/util"
 	"single-executor/internal/watchdog"
 	"strconv"
@@ -60,9 +61,10 @@ func main() {
 	}
 
 	http.HandleFunc("/dashboard", dashboard)
-	http.HandleFunc("/network", networkState)
 	http.HandleFunc("/cluster-info", clusterInfo)
 	http.HandleFunc("/node-state", nodeState)
+	http.HandleFunc("/node-stop", nodeStop)
+	http.HandleFunc("/node-start", nodeStart)
 	http.HandleFunc("/network-sever", networkSever)
 	http.Handle("/dist/", http.StripPrefix("/dist/",  http.FileServer(http.Dir(distDir))))
 
@@ -71,6 +73,26 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+}
+
+func nodeStart(writer http.ResponseWriter, request *http.Request) {
+	id := extractNodeId(writer, request)
+
+	if id == nil {
+		return
+	}
+
+	dockerRun(writer, "start", *id)
+}
+
+func nodeStop(writer http.ResponseWriter, request *http.Request) {
+	id := extractNodeId(writer, request)
+
+	if id == nil {
+		return
+	}
+
+	dockerRun(writer, "stop", *id)
 }
 
 func clusterInfo(w http.ResponseWriter, request *http.Request) {
@@ -101,14 +123,13 @@ func clusterInfo(w http.ResponseWriter, request *http.Request) {
 }
 
 func nodeState(w http.ResponseWriter, request *http.Request) {
-	id, err := util.GetIntParam("id", request.URL.Query())
+	id := extractNodeId(w, request)
 
-	if err != nil {
-		http.Error(w, "Must provide a node ID", 400)
+	if id == nil {
 		return
 	}
 
-	addr, err := cluster.HttpAddressFor(watchdog.Id(id))
+	addr, err := cluster.HttpAddressFor(*id)
 
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -118,7 +139,9 @@ func nodeState(w http.ResponseWriter, request *http.Request) {
 	response, err := httpClient().Get(addr + "/state")
 
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		if err := util.ResponseWithJson(w, nil); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
 		return
 	}
 
@@ -131,51 +154,14 @@ func nodeState(w http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func networkState(w http.ResponseWriter, request *http.Request) {
-	responses := make([]nodeData, 0)
+func networkSever(writer http.ResponseWriter, request *http.Request) {
+	id := extractNodeId(writer, request)
 
-	for _, node := range cluster.Nodes() {
-		nodeData := nodeData{
-			fmt.Sprintf("/node-state?id=%d", node.Id()),
-			strconv.Itoa(int(node.Id())),
-			node.HttpAddr(),
-			make([]string, 0),
-		}
-
-		for _, otherNode := range cluster.Nodes() {
-			if node.Id() == otherNode.Id() {
-				continue
-			}
-
-			nodeData.Others = append(nodeData.Others, strconv.Itoa(int(otherNode.Id())))
-		}
-
-		responses = append(responses, nodeData)
-	}
-
-	data, err := json.Marshal(responses)
-
-	if err != nil {
-		http.Error(w, err.Error(), 500)
+	if id == nil {
 		return
 	}
 
-	w.WriteHeader(200)
-	w.Header().Set("Content-Type", "application/json")
-
-	if _, err := w.Write(data); err != nil {
-		log.Println(err)
-	}
-}
-
-func networkSever(writer http.ResponseWriter, request *http.Request) {
-	id, err := util.GetIntParam("id", request.URL.Query())
-
-	if err != nil {
-		http.Error(writer, "Must provide id", 400)
-	}
-
-	addr, err := cluster.HttpAddressFor(watchdog.Id(id))
+	addr, err := cluster.HttpAddressFor(*id)
 
 	if err != nil {
 		http.Error(writer, "Id does not exist", 400)
@@ -210,4 +196,31 @@ func httpClient() *http.Client {
 	}
 
 	return resolvedHttpClient
+}
+
+func extractNodeId(w http.ResponseWriter, request *http.Request) *watchdog.Id {
+	id, err := util.GetIntParam("id", request.URL.Query())
+
+	if err != nil {
+		http.Error(w, "Must provide a node ID", 400)
+		return nil
+	}
+
+	result := watchdog.Id(id)
+
+	return &result
+}
+
+func dockerRun(w http.ResponseWriter, command string, id watchdog.Id) {
+	cmd := exec.Command("docker-compose", "-p", "single-executor", command, fmt.Sprintf("validator%d", id))
+
+	err := cmd.Run()
+
+	if err != nil {
+		output, _ := cmd.Output()
+
+		http.Error(w, fmt.Sprintf("%s: %s. %s", cmd.String(), err.Error(), output), 500)
+	}
+
+	w.WriteHeader(200)
 }

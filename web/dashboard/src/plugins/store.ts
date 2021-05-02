@@ -12,9 +12,16 @@ interface ClusterInfo {
   nodes: Array<ClusterNode>
 }
 
+export interface NodeData {
+  id: number
+  state: string
+}
+
+export type NodesData = { [key: number]: NodeData }
+
 interface StoreState {
   clusterInfo: ClusterInfo | null
-  nodes: Object
+  nodes: NodesData
 }
 
 export default new Vuex.Store<StoreState>({
@@ -31,8 +38,11 @@ export default new Vuex.Store<StoreState>({
     }
   },
   getters: {
-    nodes(state) {
+    nodes(state) : NodesData {
       return state.nodes
+    },
+    hasNodes(state) : boolean {
+      return Object.values(state.nodes).length > 0
     }
   },
   actions: {
