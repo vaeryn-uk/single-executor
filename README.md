@@ -69,7 +69,7 @@ of other nodes in the network to simulate network connectivty issues/split-brain
 
 The other components in this repo are present to facilitate development and demonstration
 of the core `watchdog` component. These are:
-* `demoserver` - a simple HTTP application that displays info of the system state
+* `dashboard` - a simple HTTP application that displays info of the system state
 * `chain` - a node which emulates an external system/node (such as a blockchain).
   This simply listen for incoming signatures and records them. The signing history
   can be seen in JSON via an HTTP call.
@@ -100,6 +100,9 @@ make run-demo
 Then navigate to `http://localhost:8081/dashboard`.
 
 ### Dashboard
+
+**These screenshots are old. A new dashboard is in development.**
+
 Each watchdog instance state is displayed,
 
 ![Dashboard preview 1](doc/dashboard-preview-1.png)
@@ -113,3 +116,25 @@ Network issues can be simulated by blocking access to individual
 nodes on the network. This can be used to test split brain conditions,
 
 ![Dashboard preview 3](doc/dashboard-preview-3.png)
+
+
+## Development
+
+Some useful commands for development.
+
+To bring up a container for developing the VueJS dashboard,
+
+```
+make dashboardbuilder
+```
+
+Then once inside this terminal, you have access to `npm` for managing, developing and
+building the app.
+
+```
+# to compile the app
+npm run build
+
+# to compile and watch for changes
+npm run watch
+```

@@ -24,3 +24,12 @@ func NoCache(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-cache, private, max-age=0")
 	w.Header().Set("Pragma", "no-cache")
 }
+
+func ResponseWithJson(w http.ResponseWriter, data []byte) error {
+	w.WriteHeader(200)
+	w.Header().Set("Content-Type", "application/json")
+
+	_, err := w.Write(data)
+
+	return err
+}

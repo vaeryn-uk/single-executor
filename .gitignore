@@ -1,4 +1,7 @@
 .idea
 built/
-.gocache/
+.cache/
 .env
+web/dashboard/node_modules
+web/dashboard/dist
+vendor
