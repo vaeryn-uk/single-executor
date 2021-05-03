@@ -48,16 +48,17 @@ type Watchdog struct {
 	Info            chan []byte
 	heartbeats      map[Id]bool
 	electionTimer   *time.Timer
-	leadershipTimer *time.Timer
-	heartbeatTicker *time.Ticker
-	leader          Id
-	process         *os.Process
-	votedFor        Id
-	queue           util.Queue
-	randomSource    rand.Source
-	events          map[time.Time]string
-	adapter *adapter
-	leaderAt time.Time
+	leadershipTimer       *time.Timer
+	heartbeatTicker       *time.Ticker
+	leader                Id
+	process               *os.Process
+	votedFor              Id
+	queue                 util.Queue
+	randomSource          rand.Source
+	events                map[time.Time]string
+	adapter               *adapter
+	leaderAt              time.Time
+	lastLeaderHeartbeatAt time.Time
 }
 
 func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
@@ -82,6 +83,7 @@ func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
 		make(map[time.Time]string),
 		makeAdapter(cluster),
 		time.Now(),
+		time.Unix(0, 0),
 	}
 
 	return &w
@@ -127,6 +129,10 @@ func (w *Watchdog) durationAsLeader() time.Duration {
 	}
 
 	return time.Now().Sub(w.leaderAt)
+}
+
+func (w *Watchdog) durationSinceLastLeaderHeartbeat() time.Duration {
+	return time.Now().Sub(w.lastLeaderHeartbeatAt)
 }
 
 func (w *Watchdog) resetElectionTimer() {
@@ -261,16 +267,11 @@ func (w *Watchdog) handleMessage(m message) {
 		return
 	}
 
-	if m.term > w.currentTerm {
-		w.setTerm(m.term)
-		w.reset()
-	}
-
 	switch m.mtype {
+	case MessageVoteRequest:
+		w.handleVoteRequest(m.id, m.term)
 	case MessageHeartbeat:
 		w.handleHeartbeat(m.id)
-	case MessageVoteRequest:
-		w.handleVoteRequest(m.id)
 	case MessageVote:
 		w.handleVote(m.id)
 	}
@@ -290,6 +291,7 @@ func (w *Watchdog) handleHeartbeat(id Id) {
 		w.info(fmt.Sprintf("Detected leader %d\n", id))
 		w.reset()
 		w.leader = id
+		w.lastLeaderHeartbeatAt = time.Now()
 	}
 }
 
@@ -318,22 +320,39 @@ func (w *Watchdog) isMajority(votes map[Id]bool) bool {
 	return yes > no
 }
 
-func (w *Watchdog) handleVoteRequest(id Id) {
-	if w.votedFor.IsNull() {
-		addr, err := w.cluster.AddressFor(id)
-
-		if err != nil {
-			w.error(err)
-			return
-		}
-
-		w.event(fmt.Sprintf("voted for %d", id))
-
-		w.sendMessage(addr, MessageVote)
-		w.votedFor = id
-
-		w.resetElectionTimer()
+func (w *Watchdog) handleVoteRequest(id Id, term uint8) {
+	if w.durationSinceLastLeaderHeartbeat() <= w.config.networkInterval {
+		// We've been notified of a leader too recently. Cannot participate
+		// in a new election until we've not seen a leader for a while.
+		return
 	}
+
+	if term > w.currentTerm {
+		// A new term.
+		// TODO: This nulls any previous votes. Is there a race condition here when we voted
+		// TODO: for another node, which triggered its leadership. We then vote for a new
+		// TODO: node, which will in the future get leadership and we have dual leader situation?
+		w.setTerm(term)
+	}
+
+	if !w.votedFor.IsNull() {
+		// We've already voted for something in this term.
+		return
+	}
+
+	addr, err := w.cluster.AddressFor(id)
+
+	if err != nil {
+		w.error(err)
+		return
+	}
+
+	w.event(fmt.Sprintf("voted for %d", id))
+
+	w.sendMessage(addr, MessageVote)
+	w.votedFor = id
+
+	w.resetElectionTimer()
 }
 
 func (w *Watchdog) startProcess() {
@@ -353,17 +372,33 @@ func (w *Watchdog) startProcess() {
 }
 
 func (w *Watchdog) stopProcess() {
-	if w.process != nil {
-		err := w.process.Kill()
+	if w.isProcessRunning() {
+		go func() {
+			// Need to Wait() to read exit status from the child process
+			// otherwise it sits in a zombie state indefinitely.
+			// Do this in a separate thread as we don't want to block the current.
+			if _, err := w.process.Wait(); err != nil {
+				w.error(err)
+			}
 
-		if err != nil {
+			// Once it's gone, unset everything.
+			w.process = nil
+		}()
+
+		if err := w.process.Kill(); err != nil {
 			w.error(err)
 		}
 	}
 }
 
 func (w *Watchdog) isProcessRunning() bool {
-	return w.process != nil && w.process.Pid > 0
+	if w.process == nil {
+		return false
+	}
+
+	_, err := os.FindProcess(w.process.Pid)
+
+	return err == nil
 }
 
 func (w *Watchdog) heartbeat() {
@@ -389,7 +424,7 @@ func (w *Watchdog) heartbeat() {
 func (w *Watchdog) sendMessage(addr string, mtype messageType) {
 	// Send this off the main thread to stop blocking if there are network issues.
 	go func () {
-		err, info := w.adapter.send(addr, message{w.id, w.currentTerm, mtype})
+		err, info := w.adapter.send(addr, message{w.id, w.currentTerm, mtype, w.leader})
 
 		if err != nil {
 			w.error(err)

@@ -1,5 +1,7 @@
 FROM debian
 
+RUN apt-get update && apt-get install -y procps
+
 COPY built/binary /bin/binary
 COPY built/watchdog /bin/watchdog
 

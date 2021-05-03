@@ -91,9 +91,6 @@ func (a *adapter) send(addr string, m message) (error, string) {
 }
 
 func (a *adapter) receive(data []byte, addr net.Addr) (message, error) {
-	// TODO: This should probably listen directly on the UDP connection
-	// TODO: and only emit messages that are 1) valid and 2) not from an
-	// TODO: address on the blacklist.
 	var m message
 	err, m := messageFromBytes(data)
 

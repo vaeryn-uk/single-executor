@@ -27,10 +27,11 @@ type message struct {
 	id    Id
 	term  uint8
 	mtype messageType
+	leader Id
 }
 
 func (m message) Serialize() []byte {
-	return []byte{byte(m.id), m.term, byte(m.mtype)}
+	return []byte{byte(m.id), m.term, byte(m.mtype), byte(m.leader)}
 }
 
 func (m message) String() string {
@@ -38,13 +39,14 @@ func (m message) String() string {
 }
 
 func messageFromBytes(data []byte) (err error, m message) {
-	if len(data) != 3 {
+	if len(data) != 4 {
 		err = fmt.Errorf("Malformed UDP message %x\n", data)
 	} else {
 		m = message{
 			Id(data[0]),
 			data[1],
 			messageType(data[2]),
+			Id(data[3]),
 		}
 	}
 

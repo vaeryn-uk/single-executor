@@ -3,17 +3,24 @@
     <v-row>
       <v-col cols="9">
         <v-sheet elevation="5" color="blue-grey lighten-5">
-          <d3-network v-if="hasNodes" :net-nodes="nodeData" :net-links="linkData" :options="graphOptions" @node-click="selectNode" @link-click="toggleLink"/>
-          <span class="text-caption graph-footnote">Rendered using <a href="https://github.com/emiliorizzo/vue-d3-network">vue-d3-network</a>.</span>
+          <d3-network v-if="hasNodes" :net-nodes="nodeData" :net-links="linkData" :options="graphOptions"
+                      @node-click="selectNode" @link-click="toggleLink" />
+          <span class="text-caption graph-footnote">Rendered using <a
+              href="https://github.com/emiliorizzo/vue-d3-network">vue-d3-network</a>.</span>
         </v-sheet>
       </v-col>
       <v-col cols="3">
         <v-card elevation="2" v-if="selectedNode">
-          <v-card-title>Selected: {{selectedNode}}</v-card-title>
-          <v-card-subtitle>State: <strong>{{nodes[selectedNode] ? nodes[selectedNode].state : 'down'}}</strong></v-card-subtitle>
+          <v-card-title>Selected: {{ selectedNode }}</v-card-title>
+          <v-card-subtitle>State: <strong>{{ nodes[selectedNode] ? nodes[selectedNode].state : 'down' }}</strong>
+          </v-card-subtitle>
           <v-card-actions>
-            <v-btn text color="primary" @click="startNode(selectedNode)" :disabled="loading" :loading="startLoading">Start</v-btn>
-            <v-btn text color="warning" @click="stopNode(selectedNode)" :disabled="loading" :loading="stopLoading">Stop</v-btn>
+            <v-btn text color="primary" @click="startNode(selectedNode)" :disabled="loading" :loading="startLoading">
+              Start
+            </v-btn>
+            <v-btn text color="warning" @click="stopNode(selectedNode)" :disabled="loading" :loading="stopLoading">
+              Stop
+            </v-btn>
           </v-card-actions>
 
           <v-divider></v-divider>
@@ -25,13 +32,15 @@
                 <v-icon color="success">mdi-check-bold</v-icon>
                 {{ other.id }}
                 <v-btn text color="warning" @click="networkBreak(selectedNode, other.id)"
-                       :disabled="!canLinkBeModified(selectedNode, other.id)" :loading="networkLoading[other.id]">Break</v-btn>
+                       :disabled="!canLinkBeModified(selectedNode, other.id)" :loading="networkLoading[other.id]">Break
+                </v-btn>
               </div>
               <div v-else>
                 <v-icon color="error">mdi-close</v-icon>
                 {{ other.id }}
                 <v-btn text color="primary" @click="networkRepair(selectedNode, other.id)"
-                       :disabled="!canLinkBeModified(selectedNode, other.id)" :loading="networkLoading[other.id]">Repair</v-btn>
+                       :disabled="!canLinkBeModified(selectedNode, other.id)" :loading="networkLoading[other.id]">Repair
+                </v-btn>
               </div>
             </v-list-item>
           </v-list>
@@ -45,26 +54,26 @@
 <script lang="ts">
 import {Component, Vue} from 'vue-property-decorator';
 import {mapGetters} from "vuex";
-import {NodeId, NodesData, NodeData} from "@/plugins/store";
+import {NodeData, NodeId, NodesData} from "@/plugins/store";
 import D3Network from 'vue-d3-network'
 import axios from "axios";
 
 @Component({
   computed: mapGetters(["nodes", "hasNodes", "others", "networkIsActive", "node"]),
-  components: { D3Network }
+  components: {D3Network}
 })
 export default class Network extends Vue {
   nodes!: NodesData
   hasNodes!: boolean
 
-  linkData : any = []
-  nodeData : any = []
-  selectedNode : string | null = null
-  loading : boolean = false
-  startLoading : boolean = false
-  stopLoading : boolean = false
-  networkLoading : { [key: string]: boolean } = {}
-  graphWatcher : any = null
+  linkData: any = []
+  nodeData: any = []
+  selectedNode: string | null = null
+  loading: boolean = false
+  startLoading: boolean = false
+  stopLoading: boolean = false
+  networkLoading: { [key: string]: boolean } = {}
+  graphWatcher: any = null
 
   mounted() {
     this.refreshGraphData();
@@ -94,28 +103,28 @@ export default class Network extends Vue {
     this.graphWatcher && this.graphWatcher();
   }
 
-  stopNode(id : string) {
+  stopNode(id: string) {
     if (this.loading) return;
 
     this.loading = this.stopLoading = true;
     axios.get(`/node-stop?id=${id}`).finally(() => this.loading = this.stopLoading = false)
   }
 
-  startNode(id : string) {
+  startNode(id: string) {
     if (this.loading) return;
 
     this.loading = this.startLoading = true;
     axios.get(`/node-start?id=${id}`).finally(() => this.loading = this.startLoading = false)
   }
 
-  selectNode(_ : any, node : any) {
+  selectNode(_: any, node: any) {
     if (this.loading) return;
 
     this.selectedNode = node.id
     this.refreshGraphData()
   }
 
-  toggleLink(_ : any, link : any) {
+  toggleLink(_: any, link: any) {
     if (this.loading || !this.canLinkBeModified(link.source.id, link.target.id)) return;
 
     if (this.$store.getters.networkIsActive(link.source.id, link.target.id)) {
@@ -125,14 +134,14 @@ export default class Network extends Vue {
     }
   }
 
-  networkBreak(source : NodeId, target : NodeId) {
+  networkBreak(source: NodeId, target: NodeId) {
     this.networkLoading[target] = true
 
     axios.get(`/network-break?id=${source}&other=${target}`)
         .finally(() => this.networkLoading[target] = false)
   }
 
-  networkRepair(source : NodeId, target : NodeId) {
+  networkRepair(source: NodeId, target: NodeId) {
     this.networkLoading[target] = true
 
     axios.get(`/network-repair?id=${source}&other=${target}`)
@@ -144,7 +153,7 @@ export default class Network extends Vue {
     let nodes = this.$store.getters.nodes;
 
     for (const [id, nodeData] of Object.entries<NodeData>(nodes)) {
-      let nodeIndex = this.nodeData.findIndex((n : any) => n.id === id);
+      let nodeIndex = this.nodeData.findIndex((n: any) => n.id === id);
       let node;
 
       if (nodeIndex < 0) {
@@ -180,11 +189,11 @@ export default class Network extends Vue {
           continue;
         }
 
-        let idParts : Array<string> = [otherId, currentId].sort()
+        let idParts: Array<string> = [otherId, currentId].sort()
 
         let id = idParts.join('-');
 
-        let linkIndex = this.linkData.findIndex((l : any) => l.id === id);
+        let linkIndex = this.linkData.findIndex((l: any) => l.id === id);
 
         let link;
 
@@ -211,8 +220,10 @@ export default class Network extends Vue {
     }
   }
 
-  canLinkBeModified(id : NodeId, other : NodeId) : boolean {
-    return !this.loading && !this.networkLoading[other] && this.$store.getters.node(id).state !== 'down' && this.$store.getters.node(other).state !== 'down'
+  canLinkBeModified(id: NodeId, other: NodeId): boolean {
+    return !this.loading && !this.networkLoading[other]
+        && this.$store.getters.node(id).state !== 'down'
+        && this.$store.getters.node(other).state !== 'down'
   }
 
   get graphOptions() {
@@ -232,44 +243,44 @@ export default class Network extends Vue {
 
 <!-- Styles for our graph -->
 <style lang="scss">
-  .net {
-    user-select: none;
-  }
+.net {
+  user-select: none;
+}
 
-  .node-label {
-    font-weight: bold;
-    font-size: 1rem;
-  }
+.node-label {
+  font-weight: bold;
+  font-size: 1rem;
+}
 
-  .node {
-    fill: #dcfaf3;
-    stroke: rgba(18,120,98,.7);
-    stroke-width: 3px;
-    stroke-opacity: 0.7;
-    transition: fill .5s ease;
+.node {
+  fill: #dcfaf3;
+  stroke: rgba(18, 120, 98, .7);
+  stroke-width: 3px;
+  stroke-opacity: 0.7;
+  transition: fill .5s ease;
+}
 
-    &.leading {
-      stroke: rgba(120, 18, 91, 0.7);
-    }
+.node.leading {
+  stroke: rgba(120, 18, 91, 0.7);
+}
 
-    &.selected {
-      stroke-opacity: 1.0;
-      stroke-width: 6px;
-    }
+.node.selected {
+  stroke-opacity: 1.0;
+  stroke-width: 6px;
+}
 
-    &.down {
-      stroke: rgba(243, 0, 0, 0.7);
-    }
-  }
+.node.down {
+  stroke: rgba(243, 0, 0, 0.7);
+}
 
-  .link {
-    opacity: 0.3;
-  }
+.link {
+  opacity: 0.3;
+}
 
-  .graph-footnote {
-    position: relative;
-    left: -3px;
-    float: right;
-    top: -20px
-  }
+.graph-footnote {
+  position: relative;
+  left: -3px;
+  float: right;
+  top: -20px
+}
 </style>
