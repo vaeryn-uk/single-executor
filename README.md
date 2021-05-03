@@ -103,6 +103,11 @@ Then navigate to `http://localhost:8081/dashboard`.
 
 Each watchdog instance state is displayed,
 
+![Dashboard preview 0](doc/dashboard-preview-0.png)
+
+The Network page contains a topological display of the network, and allows for starting/stopping
+individual nodes in the network.
+
 ![Dashboard preview 1](doc/dashboard-preview-1.png)
 
 Here we have hit `Stop` on the leader (`5`), and the network has resolved a new leader (`3`),
@@ -114,7 +119,6 @@ links between the leader (`3`) and some of its followers. Because `3` can no lon
 consensus on its leadership, it relinquishes leader state and `4` wins the next election,
 
 ![Dashboard preview 3](doc/dashboard-preview-3.png)
-
 
 ## Development
 
