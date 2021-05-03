@@ -1,14 +1,22 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <v-row justify="center">
-      <v-col v-for="(node, id) in nodes" :key="id">
-        <v-sheet elevation="3" class="pa-5">
-          <v-card-title>
-            Node {{ id }}
-          </v-card-title>
-          <pre v-if="node !== null" class="node-state">{{ node }}</pre>
-          <pre v-else>Cannot retrieve data. Node down?</pre>
-        </v-sheet>
+      <v-col>
+        <v-card>
+          <v-tabs vertical>
+            <v-tab v-for="(node, id) in nodes" :key="id">
+              Node {{ id }}
+            </v-tab>
+
+            <v-tab-item v-for="(node, id) in nodes" :key="id">
+              <v-card flat>
+                <v-card-text class="node-state-container">
+                  <pre>{{ node }}</pre>
+                </v-card-text>
+              </v-card>
+            </v-tab-item>
+          </v-tabs>
+        </v-card>
       </v-col>
     </v-row>
   </v-container>
@@ -26,8 +34,7 @@ export default class Nodes extends Vue {
 </script>
 
 <style scoped lang="scss">
-.node-state {
-  overflow: auto;
-  max-height: 25vh;
-}
+  .node-state-container {
+    max-height: 75vh; overflow: auto
+  }
 </style>

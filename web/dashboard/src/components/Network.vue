@@ -45,7 +45,7 @@
 <script lang="ts">
 import {Component, Vue} from 'vue-property-decorator';
 import {mapGetters} from "vuex";
-import {NodeId, NodesData} from "@/plugins/store";
+import {NodeId, NodesData, NodeData} from "@/plugins/store";
 import D3Network from 'vue-d3-network'
 import axios from "axios";
 
@@ -143,7 +143,7 @@ export default class Network extends Vue {
     let currentId;
     let nodes = this.$store.getters.nodes;
 
-    for (const [id, nodeData] of Object.entries(nodes)) {
+    for (const [id, nodeData] of Object.entries<NodeData>(nodes)) {
       let nodeIndex = this.nodeData.findIndex((n : any) => n.id === id);
       let node;
 
