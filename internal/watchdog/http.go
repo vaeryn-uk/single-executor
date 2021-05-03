@@ -39,6 +39,14 @@ func (h httpMonitor) ServeHTTP(writer http.ResponseWriter, request *http.Request
 		} else {
 			h.blacklist(writer, Id(id))
 		}
+	case "/whitelist":
+		idInput  := request.URL.Query().Get("id")
+
+		if id, err := strconv.Atoi(idInput); err != nil {
+			http.Error(writer, "Must provide a numeric ID", http.StatusBadRequest)
+		} else {
+			h.whitelist(writer, Id(id))
+		}
 	default:
 		http.NotFound(writer, request)
 	}
@@ -46,6 +54,11 @@ func (h httpMonitor) ServeHTTP(writer http.ResponseWriter, request *http.Request
 
 func (h *httpMonitor) blacklist(writer http.ResponseWriter, id Id) {
 	h.w.adapter.blacklistNode(id)
+	writer.WriteHeader(200)
+}
+
+func (h *httpMonitor) whitelist(writer http.ResponseWriter, id Id) {
+	h.w.adapter.whitelistNode(id)
 	writer.WriteHeader(200)
 }
 

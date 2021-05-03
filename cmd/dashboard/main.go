@@ -65,7 +65,12 @@ func main() {
 	http.HandleFunc("/node-state", nodeState)
 	http.HandleFunc("/node-stop", nodeStop)
 	http.HandleFunc("/node-start", nodeStart)
-	http.HandleFunc("/network-sever", networkSever)
+	http.HandleFunc("/network-break", func(writer http.ResponseWriter, request *http.Request) {
+		networkModify(writer, request, "blacklist")
+	})
+	http.HandleFunc("/network-repair", func(writer http.ResponseWriter, request *http.Request) {
+		networkModify(writer, request, "whitelist")
+	})
 	http.Handle("/dist/", http.StripPrefix("/dist/",  http.FileServer(http.Dir(distDir))))
 
 	err = http.ListenAndServe("0.0.0.0:80", nil)
@@ -139,7 +144,14 @@ func nodeState(w http.ResponseWriter, request *http.Request) {
 	response, err := httpClient().Get(addr + "/state")
 
 	if err != nil {
-		if err := util.ResponseWithJson(w, nil); err != nil {
+		data, err := json.Marshal(struct{
+			Id int `json:"id"`
+			State string `json:"state"`
+		}{int(*id), "down"})
+
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+		} else if err := util.ResponseWithJson(w, data); err != nil {
 			http.Error(w, err.Error(), 500)
 		}
 		return
@@ -154,37 +166,46 @@ func nodeState(w http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func networkSever(writer http.ResponseWriter, request *http.Request) {
+func networkModify(writer http.ResponseWriter, request *http.Request, operation string) {
 	id := extractNodeId(writer, request)
 
 	if id == nil {
 		return
 	}
 
-	addr, err := cluster.HttpAddressFor(*id)
-
-	if err != nil {
-		http.Error(writer, "Id does not exist", 400)
-	}
-
-	other, err := util.GetIntParam("other", request.URL.Query())
+	otherId, err := util.GetIntParam("other", request.URL.Query())
 
 	if err != nil {
 		http.Error(writer, "Must provide other", 400)
 	}
 
-	resp, err := httpClient().Get(addr + "/blacklist?id=" + strconv.Itoa(other))
+	if err := modifyNetworkBetweenNodes(*id, watchdog.Id(otherId), operation); err != nil {
+		http.Error(writer, err.Error(), 500)
+	} else if err := modifyNetworkBetweenNodes(watchdog.Id(otherId), *id, operation); err != nil {
+		http.Error(writer, err.Error(), 500)
+	} else {
+		writer.WriteHeader(200)
+	}
+}
+
+func modifyNetworkBetweenNodes(id watchdog.Id, other watchdog.Id, operation string) error {
+	addr, err := cluster.HttpAddressFor(id)
 
 	if err != nil {
-		http.Error(writer, err.Error(), 500)
+		return fmt.Errorf("id %d does not exist in cluster", id)
+	}
+
+	resp, err := httpClient().Get(addr + "/" + operation + "?id=" + strconv.Itoa(int(other)))
+
+	if err != nil {
+		return err
 	} else if resp.StatusCode != http.StatusOK {
 		data, _ := ioutil.ReadAll(resp.Body)
 
-		http.Error(writer, fmt.Sprintf("Request failed: %d - %s", resp.StatusCode, data), 500)
-	} else {
-		util.NoCache(writer)
-		http.Redirect(writer, request, "/dashboard", http.StatusMovedPermanently)
+		return fmt.Errorf("request failed: %d - %s", resp.StatusCode, data)
 	}
+
+	return nil
 }
 
 func httpClient() *http.Client {

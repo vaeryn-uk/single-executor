@@ -1,8 +1,8 @@
 <template>
-  <v-container>
+  <v-container fluid>
     <v-row>
-      <v-col>
-        <d3-network v-if="hasNodes" :net-nodes="nodeData" :net-links="linkData" :options="graphOptions" @node-click="selectNode"/>
+      <v-col cols="9">
+        <d3-network v-if="hasNodes" :net-nodes="nodeData" :net-links="linkData" :options="graphOptions" @node-click="selectNode" @link-click="toggleLink"/>
       </v-col>
       <v-col cols="3">
         <v-card elevation="2" v-if="selectedNode">
@@ -10,8 +10,29 @@
           <v-card-subtitle>State: <strong>{{nodes[selectedNode] ? nodes[selectedNode].state : 'down'}}</strong></v-card-subtitle>
           <v-card-actions>
             <v-btn text color="primary" @click="startNode(selectedNode)" :disabled="loading" :loading="startLoading">Start</v-btn>
-            <v-btn text color="primary" @click="stopNode(selectedNode)" :disabled="loading" :loading="stopLoading">Stop</v-btn>
+            <v-btn text color="warning" @click="stopNode(selectedNode)" :disabled="loading" :loading="stopLoading">Stop</v-btn>
           </v-card-actions>
+
+          <v-divider></v-divider>
+
+          <v-card-title>Links</v-card-title>
+          <v-list>
+            <v-list-item v-for="other in others(selectedNode)" :key="other.id">
+              <div v-if="networkIsActive(selectedNode, other.id)">
+                <v-icon color="success">mdi-check-bold</v-icon>
+                {{ other.id }}
+                <v-btn text color="warning" @click="networkBreak(selectedNode, other.id)"
+                       :disabled="!canLinkBeModified(selectedNode, other.id)" :loading="networkLoading[other.id]">Break</v-btn>
+              </div>
+              <div v-else>
+                <v-icon color="error">mdi-close</v-icon>
+                {{ other.id }}
+                <v-btn text color="primary" @click="networkRepair(selectedNode, other.id)"
+                       :disabled="!canLinkBeModified(selectedNode, other.id)" :loading="networkLoading[other.id]">Repair</v-btn>
+              </div>
+            </v-list-item>
+          </v-list>
+
         </v-card>
       </v-col>
     </v-row>
@@ -19,14 +40,14 @@
 </template>
 
 <script lang="ts">
-import { Component, Vue } from 'vue-property-decorator';
+import {Component, Vue} from 'vue-property-decorator';
 import {mapGetters} from "vuex";
-import {NodesData, NodeData} from "@/plugins/store";
+import {NodeId, NodesData} from "@/plugins/store";
 import D3Network from 'vue-d3-network'
 import axios from "axios";
 
 @Component({
-  computed: mapGetters(["nodes", "hasNodes"]),
+  computed: mapGetters(["nodes", "hasNodes", "others", "networkIsActive", "node"]),
   components: { D3Network }
 })
 export default class Network extends Vue {
@@ -39,6 +60,36 @@ export default class Network extends Vue {
   loading : boolean = false
   startLoading : boolean = false
   stopLoading : boolean = false
+  networkLoading : { [key: string]: boolean } = {}
+  graphWatcher : any = null
+
+  mounted() {
+    this.refreshGraphData();
+
+    this.graphWatcher = this.$store.watch(
+        (state) => {
+          const parts = [];
+
+          // Extract the relevant bits of the state that should trigger a graph update.
+          // This is pretty heavy on the browser, and could be improved.
+          for (let node of Object.values<any>(state.nodes)) {
+            parts.push(node ? {
+              id: node.id,
+              blacklist: node.blacklist || [],
+              leading: node.state === 'leading',
+              down: node.state === 'down',
+            } : null)
+          }
+
+          return JSON.stringify(parts)
+        },
+        () => this.refreshGraphData()
+    )
+  }
+
+  destroyed() {
+    this.graphWatcher && this.graphWatcher();
+  }
 
   stopNode(id : string) {
     if (this.loading) return;
@@ -53,34 +104,41 @@ export default class Network extends Vue {
     this.loading = this.startLoading = true;
     axios.get(`/node-start?id=${id}`).finally(() => this.loading = this.startLoading = false)
   }
+
   selectNode(_ : any, node : any) {
     if (this.loading) return;
+
     this.selectedNode = node.id
+    this.refreshGraphData()
   }
 
-  get graphOptions() {
-    return {
-      force: 5000,
-      nodeLabels: true,
-      linkWidth: 5,
-      forces: {
-        X: 0,
-        Y: 0,
-        Link: true
-      }
+  toggleLink(_ : any, link : any) {
+    if (this.loading || !this.canLinkBeModified(link.source.id, link.target.id)) return;
+
+    if (this.$store.getters.networkIsActive(link.source.id, link.target.id)) {
+      this.networkBreak(link.source.id, link.target.id);
+    } else {
+      this.networkRepair(link.source.id, link.target.id);
     }
   }
 
-  mounted() {
-    this.$store.subscribe((mutation) => {
-      if (mutation.type === 'updateNode') {
-        this.refreshGraphData(this.$store.getters.nodes)
-      }
-    })
+  networkBreak(source : NodeId, target : NodeId) {
+    this.networkLoading[target] = true
+
+    axios.get(`/network-break?id=${source}&other=${target}`)
+        .finally(() => this.networkLoading[target] = false)
   }
 
-  refreshGraphData(nodes: NodesData) {
+  networkRepair(source : NodeId, target : NodeId) {
+    this.networkLoading[target] = true
+
+    axios.get(`/network-repair?id=${source}&other=${target}`)
+        .finally(() => this.networkLoading[target] = false)
+  }
+
+  refreshGraphData() {
     let currentId;
+    let nodes = this.$store.getters.nodes;
 
     for (const [id, nodeData] of Object.entries(nodes)) {
       let nodeIndex = this.nodeData.findIndex((n : any) => n.id === id);
@@ -105,6 +163,10 @@ export default class Network extends Vue {
 
       node._cssClass = nodeData ? nodeData.state : 'down';
 
+      if (node.id === this.selectedNode) {
+        node._cssClass += ' selected';
+      }
+
       this.$set(this.nodeData, nodeIndex, node);
 
       // Can't just use `id` in the nested loop below. Have to use another variable to keep typescript happy.
@@ -121,15 +183,44 @@ export default class Network extends Vue {
 
         let linkIndex = this.linkData.findIndex((l : any) => l.id === id);
 
+        let link;
+
         if (linkIndex < 0) {
-          let link = {
+          link = {
             id,
             tid: idParts[0],
             sid: idParts[1],
           };
 
           this.linkData.push(link)
+        } else {
+          link = this.linkData[linkIndex]
         }
+
+        if (!this.$store.getters.networkIsActive(currentId, otherId)) {
+          link._color = 'red';
+        } else {
+          link._color = 'green';
+        }
+
+        this.$set(this.linkData, linkIndex, link);
+      }
+    }
+  }
+
+  canLinkBeModified(id : NodeId, other : NodeId) : boolean {
+    return !this.loading && !this.networkLoading[other] && this.$store.getters.node(id).state !== 'down' && this.$store.getters.node(other).state !== 'down'
+  }
+
+  get graphOptions() {
+    return {
+      force: 5000,
+      nodeLabels: true,
+      linkWidth: 10,
+      forces: {
+        X: 0,
+        Y: 0,
+        Link: true
       }
     }
   }
@@ -138,23 +229,32 @@ export default class Network extends Vue {
 
 <!-- Styles for our graph -->
 <style lang="scss">
+  .net {
+    user-select: none;
+  }
+
   .node {
     fill: #dcfaf3;
     stroke: rgba(18,120,98,.7);
     stroke-width: 3px;
+    stroke-opacity: 0.7;
     transition: fill .5s ease;
 
     &.leading {
-       stroke: rgba(120, 18, 91, 0.7);
+      stroke: rgba(120, 18, 91, 0.7);
+    }
+
+    &.selected {
+      stroke-opacity: 1.0;
+      stroke-width: 6px;
     }
 
     &.down {
-       stroke: rgba(243, 0, 0, 0.7);
+      stroke: rgba(243, 0, 0, 0.7);
     }
   }
 
   .link {
     opacity: 0.2;
-    stroke: green;
   }
 </style>

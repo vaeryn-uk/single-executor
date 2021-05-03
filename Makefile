@@ -35,7 +35,7 @@ built/chain: vendor $(UTILFILES) cmd/chain/main.go | $(INIT)
 built/watchdog: vendor $(UTILFILES) $(WATCHDOGFILES) | $(INIT)
 	$(GOBUILDER_BUILD) -o built/watchdog cmd/watchdog/main.go
 
-built/dashboard: vendor $(UTILFILES) cmd/dashboard/main.go | $(INIT)
+built/dashboard: vendor $(UTILFILES) cmd/dashboard/main.go web/dashboard/dist | $(INIT)
 	$(GOBUILDER_BUILD) -o built/dashboard cmd/dashboard/main.go
 
 built/flags/validator-image: $(WATCHDOGCONFIG) docker/validator/Dockerfile built/watchdog built/binary | $(INIT)

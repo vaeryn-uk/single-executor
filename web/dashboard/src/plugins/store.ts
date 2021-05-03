@@ -15,6 +15,7 @@ interface ClusterInfo {
 export interface NodeData {
   id: number
   state: string
+  blacklist: number[]
 }
 
 export type NodesData = { [key: number]: NodeData }
@@ -24,6 +25,8 @@ interface StoreState {
   nodes: NodesData
 }
 
+export type NodeId = string | number;
+
 export default new Vuex.Store<StoreState>({
   state: {
     nodes: {},
@@ -31,7 +34,9 @@ export default new Vuex.Store<StoreState>({
   },
   mutations: {
     updateNode(state, {id, data}) {
-      Vue.set(state.nodes, id, data)
+      if (!state.nodes[id] || JSON.stringify(state.nodes[id]) !== JSON.stringify(data)) {
+        Vue.set(state.nodes, id, data)
+      }
     },
     clusterInfo(state, info) {
       Vue.set(state, 'clusterInfo', info)
@@ -43,7 +48,12 @@ export default new Vuex.Store<StoreState>({
     },
     hasNodes(state) : boolean {
       return Object.values(state.nodes).length > 0
-    }
+    },
+    node: (state) => (id : NodeId) : NodeData|null => state.nodes[<number>id] || null,
+    others: (state) => (id : NodeId) => Object.values<NodeData>(state.nodes).filter((el) => el.id != id),
+    networkIsActive: (state, getters) => (to : NodeId, from : NodeId) : boolean => {
+      return !getters.node(to)?.blacklist?.includes(parseInt(<string>from, 10)) && getters.node(to)?.state !== 'down' && getters.node(from)?.state !== 'down'
+    },
   },
   actions: {
     async resolveClusterInfo({dispatch, state}) : Promise<ClusterInfo> {

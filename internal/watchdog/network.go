@@ -23,6 +23,18 @@ func (a *adapter) blacklistNode(id Id) {
 	a.blacklist = append(a.blacklist, id)
 }
 
+func (a *adapter) whitelistNode(id Id) {
+	newBlacklist := make([]Id, 0)
+
+	for _, candidate := range a.blacklist {
+		if candidate != id {
+			newBlacklist = append(newBlacklist, candidate)
+		}
+	}
+
+	a.blacklist = newBlacklist
+}
+
 func (a *adapter) listen(addr *net.UDPAddr, handler func(message), errorhandler func(error)) error {
 	listener, err := net.ListenUDP("udp", addr)
 
