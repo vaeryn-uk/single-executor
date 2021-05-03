@@ -101,19 +101,17 @@ Then navigate to `http://localhost:8081/dashboard`.
 
 ### Dashboard
 
-**These screenshots are old. A new dashboard is in development.**
-
 Each watchdog instance state is displayed,
 
 ![Dashboard preview 1](doc/dashboard-preview-1.png)
 
-The event log for each indicates what has happened. For example, here
-we have killed the leader and the system has elected a new leader,
+Here we have hit `Stop` on the leader (`5`), and the network has resolved a new leader (`3`),
 
 ![Dashboard preview 2](doc/dashboard-preview-2.png)
 
-Network issues can be simulated by blocking access to individual 
-nodes on the network. This can be used to test split brain conditions,
+We can also enable/disable individual network links between nodes. In this case, we have broken
+links between the leader (`3`) and some of its followers. Because `3` can no longer reached a majority
+consensus on its leadership, it relinquishes leader state and `4` wins the next election,
 
 ![Dashboard preview 3](doc/dashboard-preview-3.png)
 
