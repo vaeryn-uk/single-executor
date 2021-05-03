@@ -2,7 +2,10 @@
   <v-container fluid>
     <v-row>
       <v-col cols="9">
-        <d3-network v-if="hasNodes" :net-nodes="nodeData" :net-links="linkData" :options="graphOptions" @node-click="selectNode" @link-click="toggleLink"/>
+        <v-sheet elevation="5" color="blue-grey lighten-5">
+          <d3-network v-if="hasNodes" :net-nodes="nodeData" :net-links="linkData" :options="graphOptions" @node-click="selectNode" @link-click="toggleLink"/>
+          <span class="text-caption graph-footnote">Rendered using <a href="https://github.com/emiliorizzo/vue-d3-network">vue-d3-network</a>.</span>
+        </v-sheet>
       </v-col>
       <v-col cols="3">
         <v-card elevation="2" v-if="selectedNode">
@@ -233,6 +236,11 @@ export default class Network extends Vue {
     user-select: none;
   }
 
+  .node-label {
+    font-weight: bold;
+    font-size: 1rem;
+  }
+
   .node {
     fill: #dcfaf3;
     stroke: rgba(18,120,98,.7);
@@ -255,6 +263,13 @@ export default class Network extends Vue {
   }
 
   .link {
-    opacity: 0.2;
+    opacity: 0.3;
+  }
+
+  .graph-footnote {
+    position: relative;
+    left: -3px;
+    float: right;
+    top: -20px
   }
 </style>
