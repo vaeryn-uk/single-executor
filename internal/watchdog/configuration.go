@@ -154,6 +154,10 @@ func ParseConfiguration(config []byte) (Configuration, error) {
 
 	parsedConfig.command = Cmd{raw.Command.Name, raw.Command.Args}
 
+	if parsedConfig.command.command == "" {
+		return parsedConfig, fmt.Errorf("config did not contain a command")
+	}
+
 	return parsedConfig, nil
 }
 

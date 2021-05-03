@@ -114,6 +114,7 @@ func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 	}
 
 	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Access-Control-Allow-Origin", "*")		// Bad CORS
 	writer.WriteHeader(200)
 
 	if _, err := writer.Write(data); err != nil {

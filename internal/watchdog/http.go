@@ -17,13 +17,14 @@ type httpMonitor struct {
 }
 
 type watchdogReport struct {
-	Id Id `json:"id"`
-	State string `json:"state"`
-	Leader Id `json:"leader"`
-	VotedFor Id `json:"votedFor"`
-	CurrentTerm uint8 `json:"currentTerm"`
-	Blacklist []int `json:"blacklist"`
-	Events []string `json:"events"`
+	Id             Id       `json:"id"`
+	State          string   `json:"state"`
+	Leader         Id       `json:"leader"`
+	VotedFor       Id       `json:"votedFor"`
+	CurrentTerm    uint8    `json:"currentTerm"`
+	Blacklist      []int    `json:"blacklist"`
+	Events         []string `json:"events"`
+	RunningProcess string   `json:"process"`
 }
 
 func (h httpMonitor) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -85,6 +86,11 @@ func (h *httpMonitor) reportState(writer http.ResponseWriter) {
 		h.w.currentTerm,
 		blacklist,
 		events,
+		"",
+	}
+
+	if h.w.isProcessRunning() {
+		report.RunningProcess = h.w.config.command.command
 	}
 
 	data, err := json.Marshal(report)

@@ -57,6 +57,7 @@ type Watchdog struct {
 	randomSource    rand.Source
 	events          map[time.Time]string
 	adapter *adapter
+	leaderAt time.Time
 }
 
 func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
@@ -80,6 +81,7 @@ func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
 		rand.NewSource(time.Now().UnixNano()),
 		make(map[time.Time]string),
 		makeAdapter(cluster),
+		time.Now(),
 	}
 
 	return &w
@@ -102,7 +104,29 @@ func (w *Watchdog) Start() error {
 	w.queue.Start()
 	w.reset()
 
+	go func() {
+		for {
+			// Periodically check and start/stop process
+			// depending on leader state.
+			if w.durationAsLeader() > w.config.networkInterval {
+				w.startProcess()
+			} else {
+				w.stopProcess()
+			}
+
+			time.Sleep(time.Millisecond * 100)
+		}
+	}()
+
 	return nil
+}
+
+func (w *Watchdog) durationAsLeader() time.Duration {
+	if w.state != StateLeading {
+		return time.Duration(0)
+	}
+
+	return time.Now().Sub(w.leaderAt)
 }
 
 func (w *Watchdog) resetElectionTimer() {
@@ -164,6 +188,7 @@ func (w *Watchdog) makeLeader() {
 
 	w.resetLeadershipTimer()
 	w.resetVotes()
+	w.leaderAt = time.Now()
 
 	// A leader will not be checking to start a new election.
 	if w.electionTimer != nil {
@@ -312,8 +337,13 @@ func (w *Watchdog) handleVoteRequest(id Id) {
 }
 
 func (w *Watchdog) startProcess() {
-	// TODO: real process.
-	p, err := os.StartProcess("yes", []string{}, nil)
+	if w.isProcessRunning() {
+		return
+	}
+
+	attr := new(os.ProcAttr)
+
+	p, err := os.StartProcess(w.config.command.command, w.config.command.args, attr)
 
 	if err != nil {
 		w.error(err)
@@ -330,6 +360,10 @@ func (w *Watchdog) stopProcess() {
 			w.error(err)
 		}
 	}
+}
+
+func (w *Watchdog) isProcessRunning() bool {
+	return w.process != nil && w.process.Pid > 0
 }
 
 func (w *Watchdog) heartbeat() {

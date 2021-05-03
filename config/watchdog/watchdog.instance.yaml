@@ -6,4 +6,4 @@ heartbeatInterval: 1000
 listenOn: "0.0.0.0:6000"
 
 command:
-  command: yes
+  name: /bin/binary
