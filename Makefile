@@ -6,12 +6,7 @@ DASHBOARDWEBSRCFILES=$(shell find . -path ./web/dashboard/src/\* -print)
 WATCHDOGCONFIG=$(shell find . -path \*watchdog\*.yaml -print)
 INIT=.cache/gocache .env built/flags
 
-.PHONY: build
 build: built/binary built/chain built/watchdog built/dashboard
-
-.PHONY: demo
-demo: build built/flags/validator-image web/dashboard/dist
-	docker-compose build
 
 .PHONY: run-demo
 run-demo: demo
@@ -48,6 +43,16 @@ web/dashboard/dist: web/dashboard/node_modules $(DASHBOARDWEBSRCFILES) web/dashb
 
 web/dashboard/node_modules: web/dashboard/package.json
 	docker-compose -f docker-compose.build.yaml run --rm dashboardwebbuilder npm install
+
+demo: build built/flags/validator-image web/dashboard/dist built/flags/chain built/flags/dashboard
+
+built/flags/chain: built/chain docker/chain/Dockerfile
+	docker-compose build chain
+	touch built/flags/chain
+
+built/flags/dashboard: built/dashboard docker/dashboard/Dockerfile
+	docker-compose build dashboard
+	touch built/flags/dashboard
 
 # Drops you in to a terminal to manage/develop the dashboard VueJS app.
 .PHONY: dashboardbuilder

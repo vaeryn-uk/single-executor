@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/google/uuid"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"single-executor/internal/util"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +22,13 @@ type Signature struct {
 
 var signatures []Signature
 
+type signatureListener struct {
+	ch   chan Signature
+	open bool
+}
+
+var signatureListeners []signatureListener
+
 func main() {
 	portEnv := os.Getenv("CHAIN_PORT")
 
@@ -32,6 +39,7 @@ func main() {
 	}
 
 	signatures = make([]Signature, 0)
+	signatureListeners = make([]signatureListener, 0)
 
 	udpAddr := "0.0.0.0:" + strconv.Itoa(port)
 	httpAddr := "0.0.0.0:80"
@@ -95,29 +103,62 @@ func main() {
 			continue
 		}
 
-		signatures = append(signatures, Signature{instanceId, nodeId, sig, time.Now()})
+		s := Signature{instanceId, nodeId, sig, time.Now()}
+		signatures = append(signatures, s)
+
+		for _, l := range signatureListeners {
+			log.Println("About to send to channel")
+			if l.open {
+				log.Println("Sending...")
+				l.ch <- s
+			} else {
+				log.Println("Channel closed. Skipping.")
+			}
+		}
 
 		log.Printf("Signature captured. Length: %d", len(signatures))
 	}
 }
 
+
 type httpHandler struct {}
 
 func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	data, err := json.Marshal(signatures)
+	messages, done, start := util.HandleSse(writer, request)
 
-	if err != nil {
-		writer.WriteHeader(500)
-		if _, err := fmt.Fprintf(writer, "Could not encode JSON: %s", err); err != nil {
-			panic(err)
+	listener := signatureListener{make(chan Signature), true}
+	signatureListeners = append(signatureListeners, listener)
+
+	sendSignature := func(s Signature) {
+		data, err := json.Marshal(s)
+
+		if err != nil {
+			log.Printf("Failed to send signature: %s\n", err.Error())
+			return
 		}
+
+		messages <- data	// Send it to the SSE.
 	}
 
-	writer.Header().Set("Content-Type", "application/json")
-	writer.Header().Set("Access-Control-Allow-Origin", "*")		// Bad CORS
-	writer.WriteHeader(200)
+	go func() {
+		for _, s := range signatures {
+			sendSignature(s)
+		}
 
-	if _, err := writer.Write(data); err != nil {
-		panic(err)
-	}
+		for {
+			select {
+			case signature := <-listener.ch:
+				// A new signature has arrived.
+				sendSignature(signature)
+			case <- done:
+				// SSE terminated.
+				log.Println("Closing channel")
+				close(listener.ch)
+				listener.open = false
+				return
+			}
+		}
+	}()
+
+	start()
 }

@@ -75,9 +75,8 @@ export default class App extends Vue {
 
   mounted() {
     this.selectedPageIndex = this.pageIndexOfCurrentRoute
-    this.$store.dispatch('fetchNodeStates');
-
-    window.setInterval(() => this.$store.dispatch('fetchNodeStates'), 500)
+    this.$store.dispatch('streamNodeStates')
+    this.$store.dispatch('streamSignatures')
   }
 
   get currentPage() {

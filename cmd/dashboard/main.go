@@ -131,6 +131,7 @@ func nodeState(w http.ResponseWriter, request *http.Request) {
 	id := extractNodeId(w, request)
 
 	if id == nil {
+		http.NotFound(w, request)
 		return
 	}
 
@@ -141,29 +142,40 @@ func nodeState(w http.ResponseWriter, request *http.Request) {
 		return
 	}
 
-	response, err := httpClient().Get(addr + "/state")
+	messages, done, serve := util.HandleSse(w, request)
 
-	if err != nil {
-		data, err := json.Marshal(struct{
-			Id int `json:"id"`
-			State string `json:"state"`
-		}{int(*id), "down"})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				response, err := httpClient().Get(addr + "/state")
 
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-		} else if err := util.ResponseWithJson(w, data); err != nil {
-			http.Error(w, err.Error(), 500)
+				var data []byte
+
+				if err != nil {
+					data, err = json.Marshal(struct{
+						Id int `json:"id"`
+						State string `json:"state"`
+					}{int(*id), "down"})
+
+					if err != nil {
+						log.Printf("%s\n", err.Error())
+						continue
+					}
+				} else {
+					data, err = ioutil.ReadAll(response.Body)
+				}
+
+				messages <- data
+
+				time.Sleep(500 * time.Millisecond)
+			}
 		}
-		return
-	}
+	}()
 
-	data, err := ioutil.ReadAll(response.Body)
-
-	err = util.ResponseWithJson(w, data)
-
-	if err != nil {
-		fmt.Println(err)
-	}
+	serve()
 }
 
 func networkModify(writer http.ResponseWriter, request *http.Request, operation string) {

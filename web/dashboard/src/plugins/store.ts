@@ -23,6 +23,7 @@ export type NodesData = { [key: number]: NodeData }
 interface StoreState {
   clusterInfo: ClusterInfo | null
   nodes: NodesData
+  signatures: any[]
 }
 
 export type NodeId = string | number;
@@ -30,7 +31,8 @@ export type NodeId = string | number;
 export default new Vuex.Store<StoreState>({
   state: {
     nodes: {},
-    clusterInfo: null
+    clusterInfo: null,
+    signatures: [],
   },
   mutations: {
     updateNode(state, {id, data}) {
@@ -40,6 +42,13 @@ export default new Vuex.Store<StoreState>({
     },
     clusterInfo(state, info) {
       Vue.set(state, 'clusterInfo', info)
+    },
+    signature(state, signature) {
+      state.signatures.unshift(signature)
+
+      if (state.signatures.length > 10) {
+        state.signatures = state.signatures.slice(0, 10)
+      }
     }
   },
   getters: {
@@ -54,6 +63,7 @@ export default new Vuex.Store<StoreState>({
     networkIsActive: (state, getters) => (to : NodeId, from : NodeId) : boolean => {
       return !getters.node(to)?.blacklist?.includes(parseInt(<string>from, 10)) && getters.node(to)?.state !== 'down' && getters.node(from)?.state !== 'down'
     },
+    signatures: (state) => (n : number) => state.signatures.slice(0, n)
   },
   actions: {
     async resolveClusterInfo({dispatch, state}) : Promise<ClusterInfo> {
@@ -74,22 +84,27 @@ export default new Vuex.Store<StoreState>({
 
       return state.clusterInfo;
     },
-    async fetchNodeState({commit, state, dispatch}, id) {
+    async streamNodeState({commit, state, dispatch}, id) {
       await dispatch('resolveClusterInfo')
 
-      try {
-        let response = await axios.get(`/node-state?id=${id}`);
+      const evtSource = new EventSource(`/node-state?id=${id}`)
 
-        await commit('updateNode', {id, data: response.data})
-
-        return state
-      } catch (err) {
-        await commit('updateNode', {id, data: null})
+      evtSource.onmessage = function(event) {
+        commit('updateNode', {id, data: JSON.parse(event.data)})
       }
     },
-    async fetchNodeStates({dispatch}) {
+    async streamSignatures({commit, state, dispatch}) {
+      await dispatch('resolveClusterInfo')
+
+      const evtSource = new EventSource(`http://localhost:8080`)  // TODO: don't hardcode URL
+
+      evtSource.onmessage = function(event) {
+        commit('signature', JSON.parse(event.data))
+      }
+    },
+    async streamNodeStates({dispatch}) {
       let info = await dispatch('resolveClusterInfo');
-      return Promise.all(info.nodes.map((node : ClusterNode) => dispatch('fetchNodeState', node.id)))
+      return Promise.all(info.nodes.map((node : ClusterNode) => dispatch('streamNodeState', node.id)))
     },
   },
   modules: {
