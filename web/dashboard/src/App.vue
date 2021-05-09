@@ -77,6 +77,8 @@ export default class App extends Vue {
     this.selectedPageIndex = this.pageIndexOfCurrentRoute
     this.$store.dispatch('streamNodeStates')
     this.$store.dispatch('streamSignatures')
+    this.$store.dispatch('clusterConfig')
+    this.$store.dispatch('instanceConfig')
   }
 
   get currentPage() {
@@ -90,5 +92,12 @@ export default class App extends Vue {
 </script>
 
 <style lang="scss">
-
+.code-block {
+  background-color: lightgray;
+  margin: 1rem;
+  padding: 1rem;
+  border-radius: 5px;
+  white-space: pre;
+  color: rgba(0, 0, 0, 0.87);
+}
 </style>

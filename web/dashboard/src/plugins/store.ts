@@ -24,6 +24,8 @@ interface StoreState {
   clusterInfo: ClusterInfo | null
   nodes: NodesData
   signatures: any[]
+  clusterConfig: string|null
+  instanceConfig: string|null
 }
 
 export type NodeId = string | number;
@@ -33,6 +35,8 @@ export default new Vuex.Store<StoreState>({
     nodes: {},
     clusterInfo: null,
     signatures: [],
+    instanceConfig: null,
+    clusterConfig: null,
   },
   mutations: {
     updateNode(state, {id, data}) {
@@ -49,11 +53,23 @@ export default new Vuex.Store<StoreState>({
       if (state.signatures.length > 10) {
         state.signatures = state.signatures.slice(0, 10)
       }
+    },
+    clusterConfig(state, config) {
+      state.clusterConfig = config;
+    },
+    instanceConfig(state, config) {
+      state.instanceConfig = config;
     }
   },
   getters: {
     nodes(state) : NodesData {
       return state.nodes
+    },
+    clusterConfig(state) : string|null {
+      return state.clusterConfig;
+    },
+    instanceConfig(state) : string|null {
+      return state.instanceConfig;
     },
     hasNodes(state) : boolean {
       return Object.values(state.nodes).length > 0
@@ -66,6 +82,12 @@ export default new Vuex.Store<StoreState>({
     signatures: (state) => (n : number) => state.signatures.slice(0, n)
   },
   actions: {
+    async clusterConfig({commit}) {
+      commit('clusterConfig', (await axios.get("/config/cluster")).data)
+    },
+    async instanceConfig({commit}) {
+      commit('instanceConfig', (await axios.get("/config/instance")).data)
+    },
     async resolveClusterInfo({dispatch, state}) : Promise<ClusterInfo> {
       let clusterInfo : ClusterInfo;
 

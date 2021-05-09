@@ -11,7 +11,7 @@
             <v-tab-item v-for="(node, id) in nodes" :key="id">
               <v-card flat>
                 <v-card-text class="node-state-container">
-                  <pre>{{ node }}</pre>
+                  <pre class="code-block">{{ node }}</pre>
                 </v-card-text>
               </v-card>
             </v-tab-item>

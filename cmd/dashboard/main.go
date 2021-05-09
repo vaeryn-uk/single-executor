@@ -17,6 +17,8 @@ import (
 const templateDir = "/www/templates"
 const distDir = "/www/dist"
 const watchdogConfigDir = "/www/watchdog-config"
+const watchdogClusterConfig = watchdogConfigDir + "/watchdog.cluster.yaml"
+const watchdogInstanceConfig = watchdogConfigDir + "/watchdog.instance.yaml"
 
 var cluster watchdog.Cluster
 var resolvedHttpClient *http.Client
@@ -72,6 +74,12 @@ func main() {
 		networkModify(writer, request, "whitelist")
 	})
 	http.Handle("/dist/", http.StripPrefix("/dist/",  http.FileServer(http.Dir(distDir))))
+	http.HandleFunc("/config/cluster", func(writer http.ResponseWriter, request *http.Request) {
+		http.ServeFile(writer, request, watchdogClusterConfig)
+	})
+	http.HandleFunc("/config/instance", func(writer http.ResponseWriter, request *http.Request) {
+		http.ServeFile(writer, request, watchdogInstanceConfig)
+	})
 
 	err = http.ListenAndServe("0.0.0.0:80", nil)
 
