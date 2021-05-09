@@ -20,14 +20,73 @@ type Signature struct {
 	Datetime   time.Time `json:"signedAt"`
 }
 
-var signatures []Signature
-
-type signatureListener struct {
-	ch   chan Signature
-	open bool
+type signatureStorage struct {
+	signatures []Signature
+	size int
+	listeners []chan Signature
 }
 
-var signatureListeners []signatureListener
+func newStorage(size int) *signatureStorage {
+	ret := new(signatureStorage)
+
+	ret.size = size
+	ret.signatures = make([]Signature, 0)
+	ret.listeners = make([]chan Signature, 0)
+
+	return ret
+}
+
+func (s *signatureStorage) store(signature Signature) {
+	if len(s.signatures) >= s.size {
+		for index, sig := range s.signatures {
+			if index == 0 {
+				// Skip. We'll overwrite in a second.
+			} else {
+				s.signatures[index - 1] = sig
+			}
+		}
+
+		s.signatures[len(s.signatures) - 1] = signature
+	} else {
+		s.signatures = append(s.signatures, signature)
+	}
+
+	for _, l := range s.listeners {
+		l <- signature
+	}
+}
+
+func (s *signatureStorage) list() []Signature {
+	return s.signatures
+}
+
+func (s *signatureStorage) length() int {
+	return len(s.signatures)
+}
+
+func (s *signatureStorage) listen() <-chan Signature {
+	listener := make(chan Signature)
+
+	s.listeners = append(s.listeners, listener)
+
+	return listener
+}
+
+func (s *signatureStorage) detach(channel <-chan Signature) {
+	listenerIndex := -1
+
+	for index, listener := range s.listeners {
+		if channel == listener {
+			close(listener)
+			listenerIndex = index
+		}
+	}
+
+	if listenerIndex >= 0 {
+		s.listeners[listenerIndex] = s.listeners[len(s.listeners)-1]
+		s.listeners = s.listeners[:len(s.listeners)-1]
+	}
+}
 
 func main() {
 	portEnv := os.Getenv("CHAIN_PORT")
@@ -38,8 +97,7 @@ func main() {
 		log.Fatalf("Could not resolve a UDP port from environment CHAIN_PORT %s\n", err.Error())
 	}
 
-	signatures = make([]Signature, 0)
-	signatureListeners = make([]signatureListener, 0)
+	storage := newStorage(5)
 
 	udpAddr := "0.0.0.0:" + strconv.Itoa(port)
 	httpAddr := "0.0.0.0:80"
@@ -55,7 +113,7 @@ func main() {
 	log.Printf("Listening for HTTP on %s", httpAddr)
 
 	go func () {
-		if err := http.ListenAndServe(httpAddr, &httpHandler{}); err != nil {
+		if err := http.ListenAndServe(httpAddr, &httpHandler{storage}); err != nil {
 			panic(err)
 		}
 	}()
@@ -103,31 +161,19 @@ func main() {
 			continue
 		}
 
-		s := Signature{instanceId, nodeId, sig, time.Now()}
-		signatures = append(signatures, s)
-
-		for _, l := range signatureListeners {
-			log.Println("About to send to channel")
-			if l.open {
-				log.Println("Sending...")
-				l.ch <- s
-			} else {
-				log.Println("Channel closed. Skipping.")
-			}
-		}
-
-		log.Printf("Signature captured. Length: %d", len(signatures))
+		storage.store(Signature{instanceId, nodeId, sig, time.Now()})
 	}
 }
 
 
-type httpHandler struct {}
+type httpHandler struct {
+	storage *signatureStorage
+}
 
 func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	messages, done, start := util.HandleSse(writer, request)
 
-	listener := signatureListener{make(chan Signature), true}
-	signatureListeners = append(signatureListeners, listener)
+	listener := handler.storage.listen()
 
 	sendSignature := func(s Signature) {
 		data, err := json.Marshal(s)
@@ -141,20 +187,18 @@ func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 	}
 
 	go func() {
-		for _, s := range signatures {
+		for _, s := range handler.storage.list() {
 			sendSignature(s)
 		}
 
 		for {
 			select {
-			case signature := <-listener.ch:
+			case signature := <-listener:
 				// A new signature has arrived.
 				sendSignature(signature)
 			case <- done:
 				// SSE terminated.
-				log.Println("Closing channel")
-				close(listener.ch)
-				listener.open = false
+				handler.storage.detach(listener)
 				return
 			}
 		}
