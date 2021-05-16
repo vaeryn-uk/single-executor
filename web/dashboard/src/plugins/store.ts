@@ -77,7 +77,9 @@ export default new Vuex.Store<StoreState>({
       let events : EventData[] = [];
 
       for (let node of Object.values(state.nodes)) {
-        events = [...events, ...node.events];
+        if (node.events) {
+          events = [...events, ...node.events];
+        }
       }
 
       return events.sort((a, b) => {

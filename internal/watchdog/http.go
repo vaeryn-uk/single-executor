@@ -109,7 +109,7 @@ func (h *httpMonitor) reportState(writer http.ResponseWriter) {
 
 	report := watchdogReport{
 		h.w.id,
-		h.w.state.ToString(),
+		h.w.state.String(),
 		h.w.leader,
 		h.w.votedFor,
 		h.w.currentTerm,

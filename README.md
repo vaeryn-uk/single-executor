@@ -33,6 +33,63 @@ Whilst leadership is held, the accompanying binary will be run on that node.
 Some grace periods will be granted between starting/stopping the process
 so that we never overlap execution. Note this is not yet implemented.
 
+### Algorithm
+
+The watchdog instance is state-machine which utilises messages, timers & timeouts to trigger
+changes.
+
+Node state:
+* `CurrentTerm` - an incrementing integer representing the term the node is at.
+* `VotedFor` - the ID of the node this node voted for in the current term, if any.
+* `Leader` - the ID of the node that this node considers the current leader.
+* `Votes` - the current votes this node, a map of the whole cluster.
+* `Heartbeats` - the heartbeats that this leader node has received from followers, a map of the cluster.
+  When this reaches a majority a new duration of leader is applied. If no majority within a timeframe,
+  leadership is dropped.
+
+Timers:
+* `ElectionTimeout` - if this is reached, the node will start a new election.
+* `LeadershipAwareTimeout` - if this is reached, the node hasn't received heartbeats
+  from its leader and is free to participate in new elections.
+* `HeartbeatTimer` - a leader will issue heartbeats on this timer for as long as it
+  believes itself to be a leader, or from a follower node to its leader to inform the 
+  leader it is still accepted as such.
+* `LeadershipGraceTimeout` - a timeout that must be reached as leader before
+  the node actually starts the watched process.
+  
+Messages:
+* `Vote` - when a node 
+* `VoteRequest` - sent when a node wants votes from other nodes.
+* `Heartbeat` - sent by a leader periodically to retain leadership.
+  
+State-machine:
+* Start `State=Idle`
+* On any message, ignore if `Term < CurrentTerm`.
+* If `State=Idle`:
+  * Start `ElectionTimeout` (on expires: `State=Election`).
+  * On `VoteRequest`, if `not VotedFor`, set `CurrentTerm`, set `VotedFor`, send `Vote`.
+  * On `Vote`, ignore.
+  * On `Heartbeat`, set `CurrentTerm`, `State=Following`.
+* If `State=Leader`:
+  * Start `LeadershipGraceTimeout` (on expires: `startProcess()`).
+  * Start `HeartbeatTimer` (on interval: send `Heartbeat` to all nodes).
+  * On `Heartbeat`, if `Term > CurrentTerm`, set `CurrentTerm`, `State=Following`.
+  * On `VoteRequest`, ignore.
+  * On `Vote`, ignore.
+* If `State=Follower`:
+  * Start `LeadershipAwareTimeout` (on expires: `State=Idle`).
+  * Start `HeartbeatTimer` (on interval: send `Heartbeat` to leader node).
+  * On `Heartbeat`, start `LeadershipAwareTimeout` (on expires: `State=Idle`).
+  * On `VoteRequest`, ignore.
+  * On `Vote`, ignore.
+* If `State=Election`:
+  * Increment `CurrentTerm`, set `VotedFor` to self.
+  * Send `VoteRequest` to all nodes.
+  * Start `ElectionTimeout` (on expires: `State=Election`).
+  * On `Heartbeat`, if `Term > CurrentTerm`, set `CurrentTerm`, `State=Following`.
+  * On `VoteRequest`, ignore.
+  * On `Vote`, set `Votes`, if `Votes` majority, `State=Leader`.
+
 ### Known Limitations
 
 * Static configuration. The network needs to be brought down to add/remove nodes.
