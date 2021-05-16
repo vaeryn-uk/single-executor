@@ -44,8 +44,8 @@ Node state:
 * `Leader` - the ID of the node that this node considers the current leader.
 * `Votes` - the current votes this node, a map of the whole cluster.
 * `Heartbeats` - the heartbeats that this leader node has received from followers, a map of the cluster.
-  When this reaches a majority a new duration of leader is applied. If no majority within a timeframe,
-  leadership is dropped.
+  When this reaches a majority a new duration of leadership is applied. If no majority is reached within 
+  a timeframe, leadership is dropped.
 
 Timers:
 * `ElectionTimeout` - if this is reached, the node will start a new election.
@@ -58,9 +58,12 @@ Timers:
   the node actually starts the watched process.
   
 Messages:
-* `Vote` - when a node 
+* `Vote` - a node informing a candidate that the candidate received that node's vote.
 * `VoteRequest` - sent when a node wants votes from other nodes.
 * `Heartbeat` - sent by a leader periodically to retain leadership.
+
+Each message is sent with the current term and the current leader, according to the sender.
+This is used by the recipient to verify the message, ignoring it if there is a disagreement.
   
 State-machine:
 * Start `State=Idle`
