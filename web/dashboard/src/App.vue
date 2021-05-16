@@ -70,6 +70,7 @@ export default class App extends Vue {
     { title: 'Overview', icon: 'mdi-view-dashboard', path: '/' },
     { title: 'Nodes', icon: 'mdi-cloud-braces', path: '/nodes' },
     { title: 'Network', icon: 'mdi-graph', path: '/network' },
+    { title: 'Events', icon: 'mdi-calendar-text', path: '/events' },
   ]
   selectedPageIndex : number = 0
 

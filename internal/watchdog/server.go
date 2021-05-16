@@ -37,6 +37,12 @@ func (s state) ToString() string {
 	return ""
 }
 
+type WatchdogEvent struct {
+	time time.Time
+	event string
+	term uint8
+}
+
 type Watchdog struct {
 	id              Id
 	config          Configuration
@@ -55,7 +61,7 @@ type Watchdog struct {
 	votedFor              Id
 	queue                 util.Queue
 	randomSource          rand.Source
-	events                map[time.Time]string
+	events                map[time.Time]WatchdogEvent
 	adapter               *adapter
 	leaderAt              time.Time
 	lastLeaderHeartbeatAt time.Time
@@ -80,7 +86,7 @@ func NewWatchdog(id Id, config Configuration, cluster Cluster) *Watchdog {
 		NullId,
 		make(util.Queue),
 		rand.NewSource(time.Now().UnixNano()),
-		make(map[time.Time]string),
+		make(map[time.Time]WatchdogEvent),
 		makeAdapter(cluster),
 		time.Now(),
 		time.Unix(0, 0),
@@ -258,7 +264,13 @@ func (w *Watchdog) info(detail string) {
 }
 
 func (w *Watchdog) event(name string) {
-	w.events[time.Now()] = fmt.Sprintf("%s (term: %d)", name, w.currentTerm)
+	e := WatchdogEvent{
+		time.Now(),
+		name,
+		w.currentTerm,
+	}
+
+	w.events[e.time] = e
 }
 
 func (w *Watchdog) handleMessage(m message) {

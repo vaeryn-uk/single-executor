@@ -12,8 +12,16 @@ interface ClusterInfo {
   nodes: Array<ClusterNode>
 }
 
+interface EventData {
+  node: number
+  event: string
+  term: number
+  time: string
+}
+
 export interface NodeData {
   id: number
+  events: EventData[]
   state: string
   blacklist: number[]
 }
@@ -64,6 +72,21 @@ export default new Vuex.Store<StoreState>({
   getters: {
     nodes(state) : NodesData {
       return state.nodes
+    },
+    events(state) : EventData[] {
+      let events : EventData[] = [];
+
+      for (let node of Object.values(state.nodes)) {
+        events = [...events, ...node.events];
+      }
+
+      return events.sort((a, b) => {
+        if (a.time === b.time) {
+          return 0;
+        }
+
+        return a.time < b.time ? -1 : 1
+      });
     },
     clusterConfig(state) : string|null {
       return state.clusterConfig;

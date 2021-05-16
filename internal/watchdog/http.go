@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 )
 
 // Monitors a watchdog instance, returning its state
@@ -16,6 +17,27 @@ type httpMonitor struct {
 	w *Watchdog
 }
 
+type watchdogReportEvent struct {
+	Node  Id        `json:"nodeId"`
+	Event string    `json:"event"`
+	Term  uint8     `json:"term"`
+	Time  time.Time `json:"time"`
+}
+
+type sortableEvents []watchdogReportEvent
+
+func (s sortableEvents) Len() int {
+	return len(s)
+}
+
+func (s sortableEvents) Less(i, j int) bool {
+	return s[i].Time.String() < s[j].Time.String()
+}
+
+func (s sortableEvents) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
 type watchdogReport struct {
 	Id             Id       `json:"id"`
 	State          string   `json:"state"`
@@ -23,7 +45,7 @@ type watchdogReport struct {
 	VotedFor       Id       `json:"votedFor"`
 	CurrentTerm    uint8    `json:"currentTerm"`
 	Blacklist      []int    `json:"blacklist"`
-	Events         []string `json:"events"`
+	Events         sortableEvents `json:"events"`
 	RunningProcess string   `json:"process"`
 }
 
@@ -55,22 +77,29 @@ func (h httpMonitor) ServeHTTP(writer http.ResponseWriter, request *http.Request
 
 func (h *httpMonitor) blacklist(writer http.ResponseWriter, id Id) {
 	h.w.adapter.blacklistNode(id)
+	h.w.event(fmt.Sprintf("blacklist node %d", id))
 	writer.WriteHeader(200)
 }
 
 func (h *httpMonitor) whitelist(writer http.ResponseWriter, id Id) {
 	h.w.adapter.whitelistNode(id)
+	h.w.event(fmt.Sprintf("blacklist node %d", id))
 	writer.WriteHeader(200)
 }
 
 func (h *httpMonitor) reportState(writer http.ResponseWriter) {
-	events := make([]string, 0)
+	events := make(sortableEvents, 0)
 
 	for timestamp, event := range h.w.events {
-		events = append(events, fmt.Sprintf("%s: %s", timestamp.Format("15:04:05.000"), event))
+		events = append(events, watchdogReportEvent{
+			h.w.id,
+			event.event,
+			event.term,
+			timestamp,
+		})
 	}
 
-	sort.Strings(events)
+	sort.Sort(events)
 
 	blacklist := make([]int, 0)
 
